@@ -1,7 +1,18 @@
 import type { Device, DeviceStatus, VerificationStatus } from "@/lib/types";
 
 const OFFLINE_AFTER_MS = 5 * 60 * 1000;
-export const DISPLAY_TIME_ZONE = process.env.NEXT_PUBLIC_DISPLAY_TIME_ZONE ?? "Asia/Colombo";
+const DEFAULT_DISPLAY_TIME_ZONE = "Asia/Colombo";
+
+export function getDisplayTimeZone() {
+  const configuredTimeZone = process.env.NEXT_PUBLIC_DISPLAY_TIME_ZONE?.trim() || DEFAULT_DISPLAY_TIME_ZONE;
+
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: configuredTimeZone }).format(new Date());
+    return configuredTimeZone;
+  } catch {
+    return DEFAULT_DISPLAY_TIME_ZONE;
+  }
+}
 
 export function effectiveDeviceStatus(device: Pick<Device, "status" | "last_seen_at">): DeviceStatus {
   if (device.status !== "online" || !device.last_seen_at) {
@@ -22,9 +33,12 @@ export function formatDateTime(value: string | null | undefined) {
   }
 
   return new Intl.DateTimeFormat("en", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: DISPLAY_TIME_ZONE,
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: getDisplayTimeZone(),
     timeZoneName: "short"
   }).format(new Date(value));
 }

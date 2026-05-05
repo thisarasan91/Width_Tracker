@@ -1,5 +1,5 @@
 import type { Measurement } from "@/lib/types";
-import { DISPLAY_TIME_ZONE } from "@/lib/format";
+import { getDisplayTimeZone } from "@/lib/format";
 
 type MeasurementExportRow = Measurement & {
   device?: {
@@ -33,10 +33,14 @@ function formatCsvDateTime(value: string | null | undefined) {
   }
 
   return new Intl.DateTimeFormat("en-GB", {
-    dateStyle: "short",
-    timeStyle: "medium",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
     hour12: false,
-    timeZone: DISPLAY_TIME_ZONE,
+    timeZone: getDisplayTimeZone(),
     timeZoneName: "short"
   }).format(new Date(value));
 }
