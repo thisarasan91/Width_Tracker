@@ -1,4 +1,4 @@
-# Width Tracker
+# TB Meter
 
 Supabase + Vercel web app and Raspberry Pi 5 workflow for a width-measuring device.
 
@@ -203,11 +203,15 @@ python edge_detect.py
 The stability behavior can be tuned with:
 
 ```bash
-export WIDTH_STABLE_SECONDS=1.2
+export WIDTH_STABLE_SECONDS=1.0
 export WIDTH_COUNTDOWN_SECONDS=3
 export WIDTH_STABLE_TOLERANCE_MM=0.15
 export WIDTH_REQUIRE_CENTER_ALIGNMENT=true
+export WIDTH_REMOVAL_SECONDS=0.6
+export WIDTH_LOCAL_TIMEZONE=Asia/Colombo
 ```
+
+For assigned programs, each captured reading is the average of the latest 3 stable camera readings. After each capture, the Pi waits for the current tape to be removed before prompting `Place next tape` for the next label.
 
 The older terminal prompt example is still available:
 

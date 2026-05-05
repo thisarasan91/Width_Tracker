@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { measurementsToCsv } from "@/lib/csv";
+import { localInputToTimestamptz, readMeasurementFilters } from "@/lib/measurementFilters";
 import { createClient } from "@/lib/supabase/server";
 import type { Measurement } from "@/lib/types";
 
 export const runtime = "nodejs";
 
-export async function GET() {
+export async function GET(request: Request) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -16,13 +17,33 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { data, error } = await supabase
+  const searchParams = Object.fromEntries(new URL(request.url).searchParams.entries());
+  const filters = readMeasurementFilters(searchParams);
+
+  let query = supabase
     .from("measurements")
     .select(
       "*, device:devices(device_name, serial_number, loom_name), program:programs(program_name, batch_name, elastic_development_reference)"
     )
-    .order("stored_at", { ascending: false })
-    .limit(10000);
+    .order("stored_at", { ascending: false });
+
+  if (filters.deviceId) {
+    query = query.eq("device_id", filters.deviceId);
+  }
+
+  if (filters.programId) {
+    query = query.eq("program_id", filters.programId);
+  }
+
+  if (filters.from) {
+    query = query.gte("stored_at", localInputToTimestamptz(filters.from));
+  }
+
+  if (filters.to) {
+    query = query.lte("stored_at", localInputToTimestamptz(filters.to, true));
+  }
+
+  const { data, error } = await query.limit(10000);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

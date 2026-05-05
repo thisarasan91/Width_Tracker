@@ -53,7 +53,7 @@ export function LoginForm() {
   return (
     <div className="auth-panel">
       <div>
-        <p className="eyebrow">Width Tracker</p>
+        <p className="eyebrow">TB Meter</p>
         <h1>Sign in to manage devices and measurements</h1>
       </div>
 

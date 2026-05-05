@@ -1,6 +1,7 @@
 import type { Device, DeviceStatus, VerificationStatus } from "@/lib/types";
 
 const OFFLINE_AFTER_MS = 5 * 60 * 1000;
+export const DISPLAY_TIME_ZONE = process.env.NEXT_PUBLIC_DISPLAY_TIME_ZONE ?? "Asia/Colombo";
 
 export function effectiveDeviceStatus(device: Pick<Device, "status" | "last_seen_at">): DeviceStatus {
   if (device.status !== "online" || !device.last_seen_at) {
@@ -22,7 +23,9 @@ export function formatDateTime(value: string | null | undefined) {
 
   return new Intl.DateTimeFormat("en", {
     dateStyle: "medium",
-    timeStyle: "short"
+    timeStyle: "short",
+    timeZone: DISPLAY_TIME_ZONE,
+    timeZoneName: "short"
   }).format(new Date(value));
 }
 

@@ -1,4 +1,5 @@
 import type { Measurement } from "@/lib/types";
+import { DISPLAY_TIME_ZONE } from "@/lib/format";
 
 type MeasurementExportRow = Measurement & {
   device?: {
@@ -24,6 +25,20 @@ function escapeCsv(value: unknown) {
   }
 
   return text;
+}
+
+function formatCsvDateTime(value: string | null | undefined) {
+  if (!value) {
+    return "";
+  }
+
+  return new Intl.DateTimeFormat("en-GB", {
+    dateStyle: "short",
+    timeStyle: "medium",
+    hour12: false,
+    timeZone: DISPLAY_TIME_ZONE,
+    timeZoneName: "short"
+  }).format(new Date(value));
 }
 
 export function measurementsToCsv(rows: MeasurementExportRow[]) {
@@ -58,8 +73,8 @@ export function measurementsToCsv(rows: MeasurementExportRow[]) {
     row.unit,
     row.operator_name,
     row.loom_name ?? row.device?.loom_name,
-    row.sent_at,
-    row.stored_at,
+    formatCsvDateTime(row.sent_at),
+    formatCsvDateTime(row.stored_at),
     row.cloud_verification_status
   ]);
 

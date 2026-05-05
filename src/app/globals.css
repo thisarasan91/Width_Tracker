@@ -353,6 +353,8 @@ textarea:focus {
   display: flex;
   align-items: flex-end;
   justify-content: flex-start;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .form-grid .full-width,

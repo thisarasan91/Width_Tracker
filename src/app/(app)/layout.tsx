@@ -12,8 +12,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div className="app-shell">
       <aside className="sidebar">
         <Link className="brand" href="/dashboard">
-          <span className="brand-mark">W</span>
-          <span>Width Tracker</span>
+          <span className="brand-mark">TB</span>
+          <span>TB Meter</span>
         </Link>
 
         <nav className="nav-list" aria-label="Primary">

@@ -15,8 +15,9 @@ import os
 import sys
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import requests
 
@@ -24,6 +25,7 @@ import requests
 API_BASE = os.getenv("WIDTH_DEVICE_API_BASE", "http://localhost:3000").rstrip("/")
 DEVICE_TOKEN = os.getenv("WIDTH_DEVICE_TOKEN", "")
 OPERATOR_NAME = os.getenv("WIDTH_OPERATOR_NAME", "")
+LOCAL_TIMEZONE = os.getenv("WIDTH_LOCAL_TIMEZONE", "Asia/Colombo")
 
 
 class DeviceClientError(RuntimeError):
@@ -54,6 +56,14 @@ def fetch_programs() -> dict[str, Any]:
         raise DeviceClientError(payload.get("message", "Program fetch failed."))
 
     return payload
+
+
+def local_timestamp_iso() -> str:
+    try:
+        tzinfo = ZoneInfo(LOCAL_TIMEZONE)
+    except ZoneInfoNotFoundError:
+        tzinfo = timezone(timedelta(hours=5, minutes=30))
+    return datetime.now(tzinfo).isoformat()
 
 
 def choose_program(programs: list[dict[str, Any]]) -> dict[str, Any]:
@@ -121,7 +131,7 @@ def upload_measurement(
         "unit": "mm",
         "operator_name": OPERATOR_NAME or None,
         "loom_name": loom_name,
-        "sent_at": datetime.now(timezone.utc).isoformat(),
+        "sent_at": local_timestamp_iso(),
     }
 
     response = requests.post(

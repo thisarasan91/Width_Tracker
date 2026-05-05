@@ -3,17 +3,51 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { updateMeasurementStatusAction } from "@/lib/actions";
 import { createClient } from "@/lib/supabase/server";
 import { formatDateTime, formatNumber } from "@/lib/format";
-import type { Measurement, VerificationStatus } from "@/lib/types";
+import {
+  buildFilterQueryString,
+  localInputToTimestamptz,
+  readMeasurementFilters
+} from "@/lib/measurementFilters";
+import type { Device, Measurement, Program, VerificationStatus } from "@/lib/types";
 
-export default async function MeasurementsPage() {
+type MeasurementsPageProps = {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+};
+
+export default async function MeasurementsPage({ searchParams }: MeasurementsPageProps) {
+  const filters = readMeasurementFilters(await searchParams);
+  const exportQuery = buildFilterQueryString(filters);
+  const exportHref = exportQuery ? `/api/measurements/export?${exportQuery}` : "/api/measurements/export";
   const supabase = await createClient();
-  const { data } = await supabase
+
+  let measurementsQuery = supabase
     .from("measurements")
     .select("*, device:devices(device_name, serial_number, loom_name), program:programs(program_name, batch_name)")
-    .order("stored_at", { ascending: false })
-    .limit(1000);
+    .order("stored_at", { ascending: false });
 
-  const measurements = (data ?? []) as Array<
+  if (filters.deviceId) {
+    measurementsQuery = measurementsQuery.eq("device_id", filters.deviceId);
+  }
+
+  if (filters.programId) {
+    measurementsQuery = measurementsQuery.eq("program_id", filters.programId);
+  }
+
+  if (filters.from) {
+    measurementsQuery = measurementsQuery.gte("stored_at", localInputToTimestamptz(filters.from));
+  }
+
+  if (filters.to) {
+    measurementsQuery = measurementsQuery.lte("stored_at", localInputToTimestamptz(filters.to, true));
+  }
+
+  const [measurementsResult, devicesResult, programsResult] = await Promise.all([
+    measurementsQuery.limit(1000),
+    supabase.from("devices").select("*").order("device_name"),
+    supabase.from("programs").select("*").order("program_name")
+  ]);
+
+  const measurements = (measurementsResult.data ?? []) as Array<
     Measurement & {
       device: {
         device_name: string;
@@ -26,6 +60,8 @@ export default async function MeasurementsPage() {
       } | null;
     }
   >;
+  const devices = (devicesResult.data ?? []) as Device[];
+  const programs = (programsResult.data ?? []) as Program[];
 
   return (
     <div className="page-stack">
@@ -34,7 +70,7 @@ export default async function MeasurementsPage() {
           <p className="eyebrow">Cloud Verification</p>
           <h1>Measurements</h1>
         </div>
-        <a className="button primary" href="/api/measurements/export">
+        <a className="button primary" href={exportHref}>
           <Download aria-hidden="true" className="icon" />
           Export CSV
         </a>
@@ -43,8 +79,57 @@ export default async function MeasurementsPage() {
       <section className="panel">
         <div className="section-heading">
           <div>
+            <p className="eyebrow">Filters</p>
+            <h2>Machine, program, and period</h2>
+          </div>
+        </div>
+        <form className="form-grid two-column" method="get" action="/measurements">
+          <label>
+            Machine / Device
+            <select name="device_id" defaultValue={filters.deviceId}>
+              <option value="">All machines</option>
+              {devices.map((device) => (
+                <option key={device.id} value={device.id}>
+                  {device.device_name} {device.loom_name ? `(${device.loom_name})` : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Program
+            <select name="program_id" defaultValue={filters.programId}>
+              <option value="">All programs</option>
+              {programs.map((program) => (
+                <option key={program.id} value={program.id}>
+                  {program.program_name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            From
+            <input name="from" type="datetime-local" defaultValue={filters.from} />
+          </label>
+          <label>
+            To
+            <input name="to" type="datetime-local" defaultValue={filters.to} />
+          </label>
+          <div className="form-actions">
+            <button className="button primary" type="submit">
+              Apply filters
+            </button>
+            <a className="button secondary" href="/measurements">
+              Clear
+            </a>
+          </div>
+        </form>
+      </section>
+
+      <section className="panel">
+        <div className="section-heading">
+          <div>
             <p className="eyebrow">Uploaded Readings</p>
-            <h2>Latest 1,000 readings</h2>
+            <h2>Filtered readings</h2>
           </div>
         </div>
         <div className="table-wrap">
