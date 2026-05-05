@@ -355,14 +355,17 @@ def mouse_callback(event: int, x: int, y: int, flags: int, param: Any) -> None:
         app.handle_click(x, y)
 
 
-def draw_text(
-    img: np.ndarray,
-    text: str,
-    origin: tuple[int, int],
-    scale: float,
-    color: tuple[int, int, int] = COLOR_TEXT,
-    thickness: int = 2,
-) -> None:
+def draw_text(img, text, origin, scale, color=(255,255,255), thickness=2):
+    cv2.putText(
+        img,
+        text,
+        origin,
+        cv2.FONT_HERSHEY_DUPLEX
+        scale,
+        color,
+        max(2, thickness),   # increase thickness
+        cv2.LINE_AA           # keep anti-aliasing
+    ) -> None:
     cv2.putText(img, text, origin, cv2.FONT_HERSHEY_SIMPLEX, scale, color, thickness, cv2.LINE_AA)
 
 
