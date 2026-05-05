@@ -190,6 +190,10 @@ python pi_width_cloud_app.py
 
 This opens the Pi main screen with assigned cloud programs as buttons. Tapping a program shows the expected measurement sequence from Supabase, then the camera screen captures each reading automatically after the detected width is stable and the `Stabilized, getting data, 3,2,1` countdown completes.
 
+The Pi first screen also has a `Manual` button. Manual mode captures one local width reading without an assigned cloud program and does not upload the value.
+
+During a program measurement, the `Exit` button cancels the current cycle and clears captured readings without sending values to Supabase.
+
 `pi_width_cloud_app.py` reuses `edge_detect.py` for the existing edge detection and width calculation. The original detector can still be run directly with:
 
 ```bash
@@ -201,7 +205,7 @@ The stability behavior can be tuned with:
 ```bash
 export WIDTH_STABLE_SECONDS=1.2
 export WIDTH_COUNTDOWN_SECONDS=3
-export WIDTH_STABLE_TOLERANCE_MM=0.05
+export WIDTH_STABLE_TOLERANCE_MM=0.15
 export WIDTH_REQUIRE_CENTER_ALIGNMENT=true
 ```
 

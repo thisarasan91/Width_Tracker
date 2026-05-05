@@ -10,6 +10,7 @@ stability capture, countdown, and upload.
 from __future__ import annotations
 
 import os
+import math
 import threading
 import time
 from dataclasses import dataclass, field
@@ -25,10 +26,10 @@ from width_device_client import DeviceClientError, fetch_programs, upload_measur
 
 WINDOW_CLOUD = "Width Cloud Measurement"
 
-STABLE_SECONDS = float(os.getenv("WIDTH_STABLE_SECONDS", "1.2"))
+STABLE_SECONDS = float(os.getenv("WIDTH_STABLE_SECONDS", "1.0"))
 COUNTDOWN_SECONDS = int(os.getenv("WIDTH_COUNTDOWN_SECONDS", "3"))
-STABLE_TOLERANCE_MM = float(os.getenv("WIDTH_STABLE_TOLERANCE_MM", "0.05"))
-STABLE_TOLERANCE_PX = float(os.getenv("WIDTH_STABLE_TOLERANCE_PX", "2.0"))
+STABLE_TOLERANCE_MM = float(os.getenv("WIDTH_STABLE_TOLERANCE_MM", "0.15"))
+STABLE_TOLERANCE_PX = float(os.getenv("WIDTH_STABLE_TOLERANCE_PX", "4.0"))
 REQUIRE_CENTER_ALIGNMENT = os.getenv("WIDTH_REQUIRE_CENTER_ALIGNMENT", "true").lower() != "false"
 
 COLOR_BG = (30, 36, 43)
@@ -52,25 +53,33 @@ class ClickTarget:
 @dataclass
 class StabilityTracker:
     samples: list[tuple[float, float]] = field(default_factory=list)
+    anchor_value: float | None = None
+    stable_started_at: float | None = None
 
     def reset(self) -> None:
         self.samples.clear()
+        self.anchor_value = None
+        self.stable_started_at = None
 
     def update(self, value: float | None, tolerance: float, now: float) -> bool:
         if value is None:
             self.reset()
             return False
 
-        self.samples.append((now, float(value)))
-        cutoff = now - STABLE_SECONDS
-        self.samples = [(timestamp, sample) for timestamp, sample in self.samples if timestamp >= cutoff]
+        current_value = float(value)
+        self.samples.append((now, current_value))
+        self.samples = self.samples[-20:]
 
-        if len(self.samples) < 3:
+        if self.anchor_value is None or abs(current_value - self.anchor_value) > tolerance:
+            self.anchor_value = current_value
+            self.stable_started_at = now
             return False
 
-        duration = self.samples[-1][0] - self.samples[0][0]
-        values = [sample for _, sample in self.samples]
-        return duration >= STABLE_SECONDS and (max(values) - min(values)) <= tolerance
+        if self.stable_started_at is None:
+            self.stable_started_at = now
+            return False
+
+        return now - self.stable_started_at >= STABLE_SECONDS
 
 
 class WidthCloudApp:
@@ -93,6 +102,19 @@ class WidthCloudApp:
         self.upload_thread: threading.Thread | None = None
         self.upload_result: dict[str, Any] | None = None
         self.upload_error = ""
+
+    def build_manual_program(self) -> dict[str, Any]:
+        return {
+            "manual": True,
+            "assignment_id": None,
+            "program_id": None,
+            "program_name": "Manual",
+            "batch_name": None,
+            "elastic_development_reference": None,
+            "description": "Manual width measurement. Values are not uploaded.",
+            "required_data_points_per_measurement": 1,
+            "labels_for_each_reading": ["Manual width"],
+        }
 
     def load_programs(self) -> None:
         try:
@@ -118,6 +140,16 @@ class WidthCloudApp:
             self.state = "programs"
             self.program_page = 0
             self.load_programs()
+        elif action == "manual":
+            self.selected_program = self.build_manual_program()
+            self.readings = []
+            self.current_index = 0
+            self.upload_result = None
+            self.upload_error = ""
+            self.stability.reset()
+            self.countdown_started_at = None
+            self.message = "Manual measurement"
+            self.state = "sequence"
         elif action == "program":
             self.selected_program = value
             self.readings = []
@@ -134,6 +166,14 @@ class WidthCloudApp:
             self.state = "programs"
             self.stability.reset()
             self.countdown_started_at = None
+        elif action == "abort":
+            self.selected_program = None
+            self.readings = []
+            self.current_index = 0
+            self.stability.reset()
+            self.countdown_started_at = None
+            self.message = "Measurement cancelled. No values sent."
+            self.state = "programs"
         elif action == "start":
             self.state = "measuring"
             self.message = "Position tape for first reading"
@@ -171,12 +211,19 @@ class WidthCloudApp:
         self.countdown_started_at = None
 
         if self.selected_program and self.current_index >= self.selected_program["required_data_points_per_measurement"]:
+            if self.selected_program.get("manual"):
+                self.state = "manual_complete"
+                self.message = "Manual measurement complete"
+                return
             self.start_upload()
         else:
             self.message = "Captured. Move to next reading."
 
     def start_upload(self) -> None:
         if not self.selected_program or not self.device:
+            return
+        if self.selected_program.get("manual"):
+            self.state = "manual_complete"
             return
         self.state = "uploading"
         self.upload_result = None
@@ -248,12 +295,12 @@ class WidthCloudApp:
             self.countdown_started_at = now
 
         elapsed = now - self.countdown_started_at
-        remaining = max(0, COUNTDOWN_SECONDS - int(elapsed))
 
         if elapsed >= COUNTDOWN_SECONDS and width_value is not None:
             self.capture_current_reading(width_value, unit)
             return f"Captured {width_value:.3f} {unit}"
 
+        remaining = max(1, math.ceil(COUNTDOWN_SECONDS - elapsed))
         return f"Stabilized, getting data, {remaining}"
 
 
@@ -310,10 +357,14 @@ def render_program_screen(width: int, height: int) -> np.ndarray:
     draw_button(img, refresh_rect, "Refresh", "", COLOR_BUTTON_ALT)
     app.click_targets.append(ClickTarget("refresh", refresh_rect))
 
-    top = 150
+    manual_rect = (30, 112, width - 30, 184)
+    draw_button(img, manual_rect, "Manual", "Take one local width measurement. Not uploaded.", COLOR_SUCCESS)
+    app.click_targets.append(ClickTarget("manual", manual_rect))
+
+    top = 206
     margin = 30
     gap = 12
-    button_h = 84
+    button_h = 74
     available_h = max(button_h, height - top - 90)
     page_size = max(1, available_h // (button_h + gap))
     start = app.program_page * page_size
@@ -352,9 +403,11 @@ def render_sequence_screen(width: int, height: int) -> np.ndarray:
 
     draw_text(img, program["program_name"], (30, 55), 1.0, COLOR_TEXT, 3)
     draw_text(img, f"{program['required_data_points_per_measurement']} readings required", (32, 92), 0.65, COLOR_WARNING, 2)
+    if program.get("manual"):
+        draw_text(img, "Manual values are not uploaded to cloud.", (32, 124), 0.52, COLOR_TEXT, 1)
 
     labels = program["labels_for_each_reading"]
-    y = 140
+    y = 158 if program.get("manual") else 140
     for index, label in enumerate(labels, start=1):
         draw_text(img, f"{index}. {label}", (46, y), 0.62, COLOR_TEXT, 2)
         y += 38
@@ -404,37 +457,54 @@ def draw_measurement_hud(display: np.ndarray, status_text: str) -> np.ndarray:
         return display
 
     width = display.shape[1]
-    cv2.rectangle(display, (0, 0), (width, 145), (20, 26, 32), -1)
+    app.click_targets = []
+    cv2.rectangle(display, (0, 0), (width, 172), (20, 26, 32), -1)
 
     label = app.current_label()
     progress = f"{app.current_index + 1}/{program['required_data_points_per_measurement']}"
-    draw_text(display, program["program_name"][:34], (24, 42), 0.82, COLOR_TEXT, 2)
-    draw_text(display, f"Reading {progress}: {label}", (24, 82), 0.72, COLOR_WARNING, 2)
-    draw_text(display, status_text, (24, 122), 0.68, COLOR_SUCCESS if "Stabilized" in status_text else COLOR_TEXT, 2)
+    title = "Manual" if program.get("manual") else program["program_name"]
+    draw_text(display, title[:26], (18, 34), 0.68, COLOR_TEXT, 2)
+    draw_text(display, f"{progress}: {label}"[:34], (18, 72), 0.68, COLOR_WARNING, 2)
+
+    status_color = COLOR_SUCCESS if "Stabilized" in status_text or "Captured" in status_text else COLOR_TEXT
+    draw_text(display, status_text[:38], (18, 112), 0.62, status_color, 2)
 
     if app.latest_width is not None:
         draw_text(
             display,
             f"Live width: {app.latest_width:.3f} {app.latest_unit}",
-            (width - 430, 82),
-            0.68,
+            (18, 150),
+            0.56,
             COLOR_TEXT,
             2,
         )
 
-    y = 180
-    for reading in app.readings[-4:]:
+    exit_rect = (width - 150, 18, width - 18, 70)
+    draw_button(display, exit_rect, "Exit", "", COLOR_DANGER)
+    app.click_targets.append(ClickTarget("abort", exit_rect))
+
+    y = 208
+    for reading in app.readings[-3:]:
         draw_text(
             display,
-            f"{reading['reading_label']}: {reading['reading_value']} {reading['unit']}",
-            (24, y),
-            0.52,
+            f"{reading['reading_label'][:18]}: {reading['reading_value']} {reading['unit']}",
+            (18, y),
+            0.48,
             COLOR_SUCCESS,
             1,
         )
-        y += 30
+        y += 28
 
     return display
+
+
+def paste_fit_to_canvas(display: np.ndarray, width: int, height: int) -> np.ndarray:
+    view = edge_detect.fit_to_screen(display, width, height)
+    canvas = blank_screen(width, height)
+    y1 = max(0, (height - view.shape[0]) // 2)
+    x1 = max(0, (width - view.shape[1]) // 2)
+    canvas[y1:y1 + view.shape[0], x1:x1 + view.shape[1]] = view
+    return canvas
 
 
 def render_status_screen(width: int, height: int, title: str, detail: str, failed: bool = False) -> np.ndarray:
@@ -509,6 +579,13 @@ def main() -> int:
             elif app.state == "uploaded":
                 rows = app.upload_result.get("rows_stored") if app.upload_result else len(app.readings)
                 view = render_status_screen(screen_w, screen_h, "Measurement successfully stored", f"Rows stored: {rows}")
+            elif app.state == "manual_complete":
+                if app.readings:
+                    reading = app.readings[-1]
+                    detail = f"{reading['reading_label']}: {reading['reading_value']} {reading['unit']} | Not uploaded"
+                else:
+                    detail = "No values uploaded"
+                view = render_status_screen(screen_w, screen_h, "Manual measurement complete", detail)
             elif app.state == "upload_failed":
                 view = render_status_screen(screen_w, screen_h, "Upload failed, retry required", app.upload_error, failed=True)
             else:
@@ -518,8 +595,8 @@ def main() -> int:
                 display = draw_detection_overlay(frame.copy(), result, params)
                 alignment_status = edge_detect.get_center_alignment_status(display, result)
                 status_text = app.update_measurement_capture(result, alignment_status)
-                display = draw_measurement_hud(display, status_text)
-                view = edge_detect.fit_to_screen(display, screen_w, screen_h)
+                view = paste_fit_to_canvas(display, screen_w, screen_h)
+                view = draw_measurement_hud(view, status_text)
 
             cv2.imshow(WINDOW_CLOUD, view)
             key = cv2.waitKey(1) & 0xFF
