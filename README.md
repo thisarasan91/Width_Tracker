@@ -168,6 +168,12 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+For Raspberry Pi OS, install the camera/display packages if they are not already present:
+
+```bash
+sudo apt install -y python3-picamera2 python3-opencv
+```
+
 Set the device environment:
 
 ```bash
@@ -176,7 +182,30 @@ export WIDTH_DEVICE_TOKEN=wtk_your_device_token
 export WIDTH_OPERATOR_NAME="Operator name"
 ```
 
-Run:
+Run the cloud-connected camera screen:
+
+```bash
+python pi_width_cloud_app.py
+```
+
+This opens the Pi main screen with assigned cloud programs as buttons. Tapping a program shows the expected measurement sequence from Supabase, then the camera screen captures each reading automatically after the detected width is stable and the `Stabilized, getting data, 3,2,1` countdown completes.
+
+`pi_width_cloud_app.py` reuses `edge_detect.py` for the existing edge detection and width calculation. The original detector can still be run directly with:
+
+```bash
+python edge_detect.py
+```
+
+The stability behavior can be tuned with:
+
+```bash
+export WIDTH_STABLE_SECONDS=1.2
+export WIDTH_COUNTDOWN_SECONDS=3
+export WIDTH_STABLE_TOLERANCE_MM=0.05
+export WIDTH_REQUIRE_CENTER_ALIGNMENT=true
+```
+
+The older terminal prompt example is still available:
 
 ```bash
 python width_device_client.py

@@ -988,173 +988,180 @@ def mouse_callback(event, x, y, flags, param):
 # =========================================================
 # MAIN
 # =========================================================
-setup_external_display()
-load_params_from_file()
-print("DISPLAY =", os.environ.get("DISPLAY"))
-print("XAUTHORITY =", os.environ.get("XAUTHORITY"))
+def run_standalone_edge_detector():
+    global SCREEN_W, SCREEN_H, latest_frame, latest_params, latest_result, latest_display_shape
 
-picam2 = Picamera2()
-picam2.configure(
-    picam2.create_preview_configuration(
-        main={"size": (CAP_W, CAP_H), "format": "RGB888"},
-        controls={"FrameRate": FPS}
+    setup_external_display()
+    load_params_from_file()
+    print("DISPLAY =", os.environ.get("DISPLAY"))
+    print("XAUTHORITY =", os.environ.get("XAUTHORITY"))
+
+    picam2 = Picamera2()
+    picam2.configure(
+        picam2.create_preview_configuration(
+            main={"size": (CAP_W, CAP_H), "format": "RGB888"},
+            controls={"FrameRate": FPS}
+        )
     )
-)
-picam2.start()
-time.sleep(0.5)
+    picam2.start()
+    time.sleep(0.5)
 
-use_gui = has_display()
-print("GUI mode:", use_gui)
+    use_gui = has_display()
+    print("GUI mode:", use_gui)
 
-if use_gui:
-    SCREEN_W, SCREEN_H = detect_screen_size()
-    print("Detected screen:", SCREEN_W, "x", SCREEN_H)
+    if use_gui:
+        SCREEN_W, SCREEN_H = detect_screen_size()
+        print("Detected screen:", SCREEN_W, "x", SCREEN_H)
 
-    cv2.namedWindow(WINDOW_MAIN, cv2.WINDOW_NORMAL)
+        cv2.namedWindow(WINDOW_MAIN, cv2.WINDOW_NORMAL)
 
-    apply_main_window_layout()
+        apply_main_window_layout()
 
-    cv2.setMouseCallback(WINDOW_MAIN, mouse_callback, np.zeros((480, 800, 3), dtype=np.uint8))
+        cv2.setMouseCallback(WINDOW_MAIN, mouse_callback, np.zeros((480, 800, 3), dtype=np.uint8))
 
-try:
-    while True:
-        if use_gui:
-            process_params_window_events()
+    try:
+        while True:
+            if use_gui:
+                process_params_window_events()
 
-        frame = picam2.capture_array()
+            frame = picam2.capture_array()
 
-        params = get_params()
-        latest_frame = frame.copy()
-        latest_params = params.copy()
-        result = detect_parallel_edges_and_width(frame, params)
-        latest_result = result
+            params = get_params()
+            latest_frame = frame.copy()
+            latest_params = params.copy()
+            result = detect_parallel_edges_and_width(frame, params)
+            latest_result = result
 
-        display = frame.copy()
-        ui_scale = get_ui_scale(display)
-        overlay_thickness = max(2, int(round(2 * ui_scale)))
-        _, ry1, _, ry2 = result["roi_box"]
-        display[ry1:ry2, :] = apply_image_adjustments(display[ry1:ry2, :], params)
-        cv2.rectangle(display, (0, ry1), (display.shape[1] - 1, ry2), (80, 80, 80), overlay_thickness)
+            display = frame.copy()
+            ui_scale = get_ui_scale(display)
+            overlay_thickness = max(2, int(round(2 * ui_scale)))
+            _, ry1, _, ry2 = result["roi_box"]
+            display[ry1:ry2, :] = apply_image_adjustments(display[ry1:ry2, :], params)
+            cv2.rectangle(display, (0, ry1), (display.shape[1] - 1, ry2), (80, 80, 80), overlay_thickness)
 
-        if params["show_edges"]:
-            edges = result["edges"]
-            edge_bgr = np.zeros((edges.shape[0], edges.shape[1], 3), dtype=np.uint8)
-            edge_bgr[:, :, 2] = edges
-            display[ry1:ry2, :] = cv2.addWeighted(display[ry1:ry2, :], 1.0, edge_bgr, 0.6, 0)
+            if params["show_edges"]:
+                edges = result["edges"]
+                edge_bgr = np.zeros((edges.shape[0], edges.shape[1], 3), dtype=np.uint8)
+                edge_bgr[:, :, 2] = edges
+                display[ry1:ry2, :] = cv2.addWeighted(display[ry1:ry2, :], 1.0, edge_bgr, 0.6, 0)
 
-        if result["ok"]:
-            cv2.line(display, result["line1"][0], result["line1"][1], (0, 255, 0), max(2, int(round(3 * ui_scale))))
-            cv2.line(display, result["line2"][0], result["line2"][1], (0, 255, 0), max(2, int(round(3 * ui_scale))))
+            if result["ok"]:
+                cv2.line(display, result["line1"][0], result["line1"][1], (0, 255, 0), max(2, int(round(3 * ui_scale))))
+                cv2.line(display, result["line2"][0], result["line2"][1], (0, 255, 0), max(2, int(round(3 * ui_scale))))
 
-            if result["midline"] is not None:
-                cv2.line(display, result["midline"][0], result["midline"][1], (255, 255, 0), max(1, int(round(ui_scale))))
+                if result["midline"] is not None:
+                    cv2.line(display, result["midline"][0], result["midline"][1], (255, 255, 0), max(1, int(round(ui_scale))))
 
-            cv2.line(display, result["segment1"], result["segment2"], (255, 0, 255), max(2, int(round(3 * ui_scale))))
-            cv2.circle(display, result["segment1"], max(4, int(round(6 * ui_scale))), (255, 0, 255), -1)
-            cv2.circle(display, result["segment2"], max(4, int(round(6 * ui_scale))), (255, 0, 255), -1)
+                cv2.line(display, result["segment1"], result["segment2"], (255, 0, 255), max(2, int(round(3 * ui_scale))))
+                cv2.circle(display, result["segment1"], max(4, int(round(6 * ui_scale))), (255, 0, 255), -1)
+                cv2.circle(display, result["segment2"], max(4, int(round(6 * ui_scale))), (255, 0, 255), -1)
 
-            text1 = f"Width: {result['width_px']:.2f} px"
-            if result["width_mm"] is not None:
-                text1 += f" ({result['width_mm']:.2f} mm)"
+                text1 = f"Width: {result['width_px']:.2f} px"
+                if result["width_mm"] is not None:
+                    text1 += f" ({result['width_mm']:.2f} mm)"
 
-            text2 = f"Angle: {result['angle_deg']:.2f} deg"
+                text2 = f"Angle: {result['angle_deg']:.2f} deg"
 
-            cv2.putText(display, text1, (int(round(20 * ui_scale)), display.shape[0] - int(round(50 * ui_scale))),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1.0 * ui_scale, (0, 255, 255), overlay_thickness, cv2.LINE_AA)
-            cv2.putText(display, text2, (int(round(20 * ui_scale)), display.shape[0] - int(round(15 * ui_scale))),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.8 * ui_scale, (0, 255, 255), overlay_thickness, cv2.LINE_AA)
-        else:
-            cv2.putText(display, f"Status: {result['msg']}", (int(round(20 * ui_scale)), display.shape[0] - int(round(20 * ui_scale))),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.8 * ui_scale, (0, 0, 255), overlay_thickness, cv2.LINE_AA)
-
-        mm_text = f"Scale: {MM_PER_PIXEL:.6f} mm/px" if USE_MM else "Scale: not calibrated"
-        cv2.putText(display, mm_text, (int(round(20 * ui_scale)), int(round(95 * ui_scale))),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7 * ui_scale, (255, 255, 0), overlay_thickness, cv2.LINE_AA)
-        cv2.putText(display, calibration_status, (int(round(20 * ui_scale)), int(round(130 * ui_scale))),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6 * ui_scale, (255, 255, 0), overlay_thickness, cv2.LINE_AA)
-        if pending_calibration_width_mm is not None:
-            pending_text = f"Pending calibration width: {pending_calibration_width_mm:.3f} mm"
-            cv2.putText(display, pending_text, (int(round(20 * ui_scale)), int(round(165 * ui_scale))),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.55 * ui_scale, (255, 255, 0), overlay_thickness, cv2.LINE_AA)
-
-        alignment_status = get_center_alignment_status(display, result)
-        draw_center_alignment_indicator(display, alignment_status)
-
-        if alignment_status["aligned"] and result.get("width_mm") is not None:
-            final_text = f"{result['width_mm']:.2f} mm"
-            final_scale = 1.4 * ui_scale
-            final_thickness = max(3, int(round(4 * ui_scale)))
-            text_size, _ = cv2.getTextSize(
-                final_text,
-                cv2.FONT_HERSHEY_SIMPLEX,
-                final_scale,
-                final_thickness,
-            )
-            text_x = max(10, (display.shape[1] - text_size[0]) // 2)
-            text_y = min(
-                display.shape[0] - 20,
-                ry2 + max(text_size[1] + 18, int(round(40 * ui_scale))),
-            )
-            cv2.putText(
-                display,
-                final_text,
-                (text_x, text_y),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                final_scale,
-                (0, 255, 0),
-                final_thickness,
-                cv2.LINE_AA,
-            )
-
-        cal_button_ready = pending_calibration_width_mm is not None and result.get("ok")
-        cal_button_text = "Save Calibration" if cal_button_ready else "Calibrate"
-        draw_button(display, (BTN_X1, BTN_Y1, BTN_X2, BTN_Y2), "Params", params_window_open)
-        draw_button(display, "cal", cal_button_text, cal_button_ready)
-        cv2.putText(display, "Q=Quit  P=Toggle Params  C=Calibrate", (int(round(220 * ui_scale)), int(round(45 * ui_scale))),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.8 * ui_scale, (255, 255, 255), overlay_thickness, cv2.LINE_AA)
-        display_view = build_main_view(display, result)
-        latest_display_shape = display.shape
-
-        if use_gui:
-            sync_params_window_state()
-
-            target_w, target_h = get_main_view_size()
-            if target_w and target_h:
-                view = fit_to_screen(display_view, target_w, target_h)
+                cv2.putText(display, text1, (int(round(20 * ui_scale)), display.shape[0] - int(round(50 * ui_scale))),
+                            cv2.FONT_HERSHEY_SIMPLEX, 1.0 * ui_scale, (0, 255, 255), overlay_thickness, cv2.LINE_AA)
+                cv2.putText(display, text2, (int(round(20 * ui_scale)), display.shape[0] - int(round(15 * ui_scale))),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.8 * ui_scale, (0, 255, 255), overlay_thickness, cv2.LINE_AA)
             else:
-                view = display_view
+                cv2.putText(display, f"Status: {result['msg']}", (int(round(20 * ui_scale)), display.shape[0] - int(round(20 * ui_scale))),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.8 * ui_scale, (0, 0, 255), overlay_thickness, cv2.LINE_AA)
 
-            cv2.setMouseCallback(WINDOW_MAIN, mouse_callback, view)
-            cv2.imshow(WINDOW_MAIN, view)
+            mm_text = f"Scale: {MM_PER_PIXEL:.6f} mm/px" if USE_MM else "Scale: not calibrated"
+            cv2.putText(display, mm_text, (int(round(20 * ui_scale)), int(round(95 * ui_scale))),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7 * ui_scale, (255, 255, 0), overlay_thickness, cv2.LINE_AA)
+            cv2.putText(display, calibration_status, (int(round(20 * ui_scale)), int(round(130 * ui_scale))),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6 * ui_scale, (255, 255, 0), overlay_thickness, cv2.LINE_AA)
+            if pending_calibration_width_mm is not None:
+                pending_text = f"Pending calibration width: {pending_calibration_width_mm:.3f} mm"
+                cv2.putText(display, pending_text, (int(round(20 * ui_scale)), int(round(165 * ui_scale))),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.55 * ui_scale, (255, 255, 0), overlay_thickness, cv2.LINE_AA)
 
-            key = cv2.waitKey(1) & 0xFF
-            if key == ord('q'):
-                break
-            elif key == ord('c'):
-                if pending_calibration_width_mm is not None and result.get("ok"):
-                    save_current_calibration(result)
+            alignment_status = get_center_alignment_status(display, result)
+            draw_center_alignment_indicator(display, alignment_status)
+
+            if alignment_status["aligned"] and result.get("width_mm") is not None:
+                final_text = f"{result['width_mm']:.2f} mm"
+                final_scale = 1.4 * ui_scale
+                final_thickness = max(3, int(round(4 * ui_scale)))
+                text_size, _ = cv2.getTextSize(
+                    final_text,
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    final_scale,
+                    final_thickness,
+                )
+                text_x = max(10, (display.shape[1] - text_size[0]) // 2)
+                text_y = min(
+                    display.shape[0] - 20,
+                    ry2 + max(text_size[1] + 18, int(round(40 * ui_scale))),
+                )
+                cv2.putText(
+                    display,
+                    final_text,
+                    (text_x, text_y),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    final_scale,
+                    (0, 255, 0),
+                    final_thickness,
+                    cv2.LINE_AA,
+                )
+
+            cal_button_ready = pending_calibration_width_mm is not None and result.get("ok")
+            cal_button_text = "Save Calibration" if cal_button_ready else "Calibrate"
+            draw_button(display, (BTN_X1, BTN_Y1, BTN_X2, BTN_Y2), "Params", params_window_open)
+            draw_button(display, "cal", cal_button_text, cal_button_ready)
+            cv2.putText(display, "Q=Quit  P=Toggle Params  C=Calibrate", (int(round(220 * ui_scale)), int(round(45 * ui_scale))),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8 * ui_scale, (255, 255, 255), overlay_thickness, cv2.LINE_AA)
+            display_view = build_main_view(display, result)
+            latest_display_shape = display.shape
+
+            if use_gui:
+                sync_params_window_state()
+
+                target_w, target_h = get_main_view_size()
+                if target_w and target_h:
+                    view = fit_to_screen(display_view, target_w, target_h)
                 else:
-                    open_calibration_input_window()
-            elif key == ord('p'):
-                if not params_window_open:
-                    open_params_window()
-                else:
-                    close_params_window()
-        else:
-            cv2.imwrite("frame_debug.jpg", display)
-            print("Saved frame_debug.jpg")
-            time.sleep(1)
+                    view = display_view
 
-except KeyboardInterrupt:
-    pass
-finally:
-    picam2.stop()
-    close_calibration_input_window()
-    close_params_window()
-    save_params_to_file()
-    if params_root is not None:
-        try:
-            params_root.destroy()
-        except tk.TclError:
-            pass
-    cv2.destroyAllWindows()
+                cv2.setMouseCallback(WINDOW_MAIN, mouse_callback, view)
+                cv2.imshow(WINDOW_MAIN, view)
+
+                key = cv2.waitKey(1) & 0xFF
+                if key == ord('q'):
+                    break
+                elif key == ord('c'):
+                    if pending_calibration_width_mm is not None and result.get("ok"):
+                        save_current_calibration(result)
+                    else:
+                        open_calibration_input_window()
+                elif key == ord('p'):
+                    if not params_window_open:
+                        open_params_window()
+                    else:
+                        close_params_window()
+            else:
+                cv2.imwrite("frame_debug.jpg", display)
+                print("Saved frame_debug.jpg")
+                time.sleep(1)
+
+    except KeyboardInterrupt:
+        pass
+    finally:
+        picam2.stop()
+        close_calibration_input_window()
+        close_params_window()
+        save_params_to_file()
+        if params_root is not None:
+            try:
+                params_root.destroy()
+            except tk.TclError:
+                pass
+        cv2.destroyAllWindows()
+
+
+if __name__ == "__main__":
+    run_standalone_edge_detector()
