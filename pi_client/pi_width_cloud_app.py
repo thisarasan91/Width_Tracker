@@ -364,7 +364,7 @@ def draw_text(img, text, origin, scale, color=(255,255,255), thickness=2):
         scale,
         color,
         max(2, thickness),   # increase thickness
-        cv2.LINE_AA           # keep anti-aliasing
+        cv2.LINE_AA,          # keep anti-aliasing
     ) -> None:
     cv2.putText(img, text, origin, cv2.FONT_HERSHEY_SIMPLEX, scale, color, thickness, cv2.LINE_AA)
 
