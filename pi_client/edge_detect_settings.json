@@ -1,0 +1,17 @@
+{
+  "brightness": 1,
+  "contrast": 0,
+  "blur": 21,
+  "canny_low": 78,
+  "canny_high": 160,
+  "hough_th": 49,
+  "min_line_len": 120,
+  "max_line_gap": 60,
+  "angle_tol": 12,
+  "roi_top": 40,
+  "roi_bottom": 56,
+  "min_sep_px": 29,
+  "show_edges": 1,
+  "use_mm": true,
+  "mm_per_pixel": 0.02190040818080059
+}
