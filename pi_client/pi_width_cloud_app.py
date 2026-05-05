@@ -360,14 +360,12 @@ def draw_text(img, text, origin, scale, color=(255,255,255), thickness=2):
         img,
         text,
         origin,
-        cv2.FONT_HERSHEY_DUPLEX
+        cv2.FONT_HERSHEY_SIMPLEX,
         scale,
         color,
         max(2, thickness),   # increase thickness
-        cv2.LINE_AA,          # keep anti-aliasing
-    ) -> None:
-    cv2.putText(img, text, origin, cv2.FONT_HERSHEY_SIMPLEX, scale, color, thickness, cv2.LINE_AA)
-
+        cv2.LINE_AA           # keep anti-aliasing
+    )
 
 def draw_button(
     img: np.ndarray,
