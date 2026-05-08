@@ -185,6 +185,19 @@ export WIDTH_DEVICE_TOKEN=wtk_your_device_token
 export WIDTH_OPERATOR_NAME="Operator name"
 ```
 
+Or create `pi_client/device_config.json` for a Pi-local fallback when those environment variables are not set:
+
+```json
+{
+  "WIDTH_DEVICE_API_BASE": "https://your-vercel-app.vercel.app",
+  "WIDTH_DEVICE_TOKEN": "wtk_your_device_token",
+  "WIDTH_OPERATOR_NAME": "Operator name",
+  "WIDTH_LOCAL_TIMEZONE": "Asia/Colombo"
+}
+```
+
+`pi_client/device_config.json` is ignored by Git because it contains the device token. Keep `pi_client/device_config.example.json` as the safe template.
+
 Run the cloud-connected camera screen:
 
 ```bash
@@ -193,7 +206,7 @@ python pi_width_cloud_app.py
 
 This opens the Pi main screen with assigned cloud programs as buttons. Tapping a program shows the expected measurement sequence from Supabase, then the camera screen captures each reading automatically after the detected width is stable and the `Stabilized, getting data, 3,2,1` countdown completes.
 
-The Pi first screen also has a `Manual` button. Manual mode captures one local width reading without an assigned cloud program and does not upload the value.
+The Pi first screen also has a `Manual` button. Manual mode is live-only: it continuously shows the current width without taking a measurement sequence or uploading values.
 
 During a program measurement, the `Exit` button cancels the current cycle and clears captured readings without sending values to Supabase.
 
@@ -216,7 +229,7 @@ export WIDTH_LOCAL_TIMEZONE=Asia/Colombo
 
 For assigned programs, each captured reading is the average of the latest 3 stable camera readings. After each capture, the Pi waits for the current tape to be removed before prompting `Place next tape` for the next label.
 
-Assigned programs also show a `Cloud Send` toggle before starting measurement. When it is off, readings are measured locally with tolerance coloring, but nothing is uploaded. Once measurement starts, the toggle is locked for that cycle.
+Assigned programs also show a `Cloud Send` toggle before starting measurement. When it is off, the program becomes a live width display with program tolerance coloring and no captured readings or upload. Once measurement starts, the toggle is locked for that cycle.
 
 The older terminal prompt example is still available:
 

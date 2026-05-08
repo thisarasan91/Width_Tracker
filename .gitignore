@@ -9,3 +9,4 @@ coverage
 *.tsbuildinfo
 __pycache__/
 *.pyc
+pi_client/device_config.json

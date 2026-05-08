@@ -191,9 +191,13 @@ class WidthCloudApp:
             self.state = "programs"
         elif action == "start":
             self.cloud_toggle_locked = True
-            self.state = "measuring"
-            self.message = "Position tape for first reading"
             self.reset_capture_state()
+            if self.selected_program and not self.selected_program.get("manual") and not self.send_to_cloud_enabled:
+                self.state = "program_live"
+                self.message = "Cloud sending off. Live width only."
+            else:
+                self.state = "measuring"
+                self.message = "Position tape for first reading"
         elif action == "retry_upload":
             self.start_upload()
         elif action == "new_measurement":
@@ -348,28 +352,52 @@ class WidthCloudApp:
         remaining = max(1, math.ceil(COUNTDOWN_SECONDS - elapsed))
         return f"Stabilized, getting data, {remaining}"
 
-    def tolerance_status(self, value: float | None) -> str:
-        if value is None or not self.selected_program or self.latest_unit != "mm":
-            return "unknown"
+    def program_number(self, key: str, default: float | None = None) -> float | None:
+        if not self.selected_program:
+            return default
+
+        value = self.selected_program.get(key)
+        if value is None or value == "":
+            return default
 
         try:
-            nominal = float(self.selected_program.get("nominal_width"))
-            upper = float(self.selected_program.get("upper_tolerance"))
-            lower = float(self.selected_program.get("lower_tolerance"))
+            return float(value)
         except (TypeError, ValueError):
+            return default
+
+    def tolerance_limits(self) -> tuple[float, float, float] | None:
+        nominal = self.program_number("nominal_width")
+        if nominal is None:
+            return None
+
+        lower = self.program_number("lower_tolerance", 0.0) or 0.0
+        upper = self.program_number("upper_tolerance", 0.0) or 0.0
+        return nominal - lower, nominal, nominal + upper
+
+    def tolerance_status(self, value: float | None, unit: str | None = None) -> str:
+        active_unit = unit or self.latest_unit
+        limits = self.tolerance_limits()
+        if value is None or limits is None or active_unit != "mm":
             return "unknown"
 
-        min_allowed = nominal - lower
-        max_allowed = nominal + upper
+        min_allowed, _, max_allowed = limits
         return "in" if min_allowed <= value <= max_allowed else "out"
 
-    def tolerance_color(self, value: float | None) -> tuple[int, int, int]:
-        status = self.tolerance_status(value)
+    def tolerance_color(self, value: float | None, unit: str | None = None) -> tuple[int, int, int]:
+        status = self.tolerance_status(value, unit)
         if status == "in":
             return COLOR_SUCCESS
         if status == "out":
             return COLOR_DANGER
         return COLOR_TEXT
+
+    def tolerance_footer_text(self) -> str:
+        limits = self.tolerance_limits()
+        if limits is None:
+            return "Tolerance: not set"
+
+        lower, nominal, upper = limits
+        return f"LSL {lower:.3f} | NOM {nominal:.3f} | USL {upper:.3f}"
 
     def _line_angle_from_vertical_degrees(self, line: tuple[tuple[int, int], tuple[int, int]] | None) -> float | None:
         if line is None:
@@ -424,6 +452,22 @@ class WidthCloudApp:
             return manual_message
 
         return f"Width live: {width_value:.3f} {unit}"
+
+    def update_program_live_display(self, result: dict[str, Any], alignment_status: dict[str, Any]) -> str:
+        width_value, unit, _ = self.apply_detection(result, alignment_status)
+        if not result.get("ok") or width_value is None:
+            self.latest_width = None
+            return f"Detecting edges: {result.get('msg', 'no reading')}"
+
+        if REQUIRE_CENTER_ALIGNMENT and not alignment_status.get("aligned"):
+            return "Align tape to center guide"
+
+        status = self.tolerance_status(width_value, unit)
+        if status == "in":
+            return f"Within tolerance: {width_value:.3f} {unit}"
+        if status == "out":
+            return f"Out of tolerance: {width_value:.3f} {unit}"
+        return f"Live width: {width_value:.3f} {unit}"
 
 
 app = WidthCloudApp()
@@ -587,8 +631,9 @@ def draw_measurement_hud(display: np.ndarray, status_text: str) -> np.ndarray:
 
     width = display.shape[1]
     app.click_targets = []
+    bottom_top = display.shape[0] - 82
     cv2.rectangle(display, (0, 0), (width, 126), (20, 26, 32), -1)
-    cv2.rectangle(display, (0, display.shape[0] - 52), (width, display.shape[0]), (20, 26, 32), -1)
+    cv2.rectangle(display, (0, bottom_top), (width, display.shape[0]), (20, 26, 32), -1)
 
     label = app.current_label()
     progress = f"{app.current_index + 1}/{program['required_data_points_per_measurement']}"
@@ -607,7 +652,7 @@ def draw_measurement_hud(display: np.ndarray, status_text: str) -> np.ndarray:
             f"Live width: {app.latest_width:.3f} {app.latest_unit}",
             (width - 335, 108),
             0.58,
-            app.tolerance_color(app.latest_width),
+            app.tolerance_color(app.latest_width, app.latest_unit),
             2,
         )
 
@@ -619,20 +664,59 @@ def draw_measurement_hud(display: np.ndarray, status_text: str) -> np.ndarray:
         countdown = status_text.rsplit(" ", 1)[-1]
         draw_text(display, countdown, (width // 2 - 38, display.shape[0] // 2 + 42), 3.0, COLOR_SUCCESS, 7)
 
+    draw_text(display, app.tolerance_footer_text(), (16, display.shape[0] - 50), 0.48, COLOR_WARNING, 2)
+
+    if app.latest_width is not None and app.latest_unit != "mm" and app.tolerance_limits() is not None:
+        draw_text(display, "Tolerance needs mm calibration", (width - 330, display.shape[0] - 50), 0.44, COLOR_DANGER, 1)
+
     x = 16
     y = display.shape[0] - 18
-    for reading in app.readings[-2:]:
+    for reading in app.readings[-1:]:
         reading_value = float(reading["reading_value"])
+        reading_unit = str(reading.get("unit", app.latest_unit))
         draw_text(
             display,
             f"{reading['reading_label'][:14]}: {reading['reading_value']} {reading['unit']}"[:32],
             (x, y),
             0.46,
-            app.tolerance_color(reading_value),
+            app.tolerance_color(reading_value, reading_unit),
             1,
         )
         x += 350
 
+    return display
+
+
+def draw_program_live_hud(display: np.ndarray, status_text: str) -> np.ndarray:
+    program = app.selected_program
+    if not program:
+        return display
+
+    width = display.shape[1]
+    height = display.shape[0]
+    app.click_targets = []
+    cv2.rectangle(display, (0, 0), (width, 116), (20, 26, 32), -1)
+    cv2.rectangle(display, (0, height - 82), (width, height), (20, 26, 32), -1)
+
+    draw_text(display, f"TB Meter | {program['program_name']}"[:34], (18, 34), 0.66, COLOR_TEXT, 2)
+    draw_text(display, "Cloud OFF | Live width only", (18, 74), 0.6, COLOR_WARNING, 2)
+    draw_text(display, status_text[:48], (18, 108), 0.52, app.tolerance_color(app.latest_width, app.latest_unit), 2)
+
+    if app.latest_width is not None:
+        value_text = f"{app.latest_width:.3f} {app.latest_unit}"
+        value_color = app.tolerance_color(app.latest_width, app.latest_unit)
+        text_size, _ = cv2.getTextSize(value_text, cv2.FONT_HERSHEY_SIMPLEX, 1.8, 5)
+        draw_text(display, value_text, ((width - text_size[0]) // 2, height // 2 + 34), 1.8, value_color, 5)
+    else:
+        draw_text(display, "No width detected", (width // 2 - 180, height // 2 + 20), 0.9, COLOR_DANGER, 3)
+
+    draw_text(display, app.tolerance_footer_text(), (18, height - 46), 0.52, COLOR_WARNING, 2)
+    if app.latest_width is not None and app.latest_unit != "mm" and app.tolerance_limits() is not None:
+        draw_text(display, "Tolerance needs mm calibration", (18, height - 18), 0.46, COLOR_DANGER, 1)
+
+    exit_rect = (width - 128, 18, width - 14, 66)
+    draw_button(display, exit_rect, "Exit", "", COLOR_DANGER)
+    app.click_targets.append(ClickTarget("abort", exit_rect))
     return display
 
 
@@ -765,6 +849,15 @@ def main() -> int:
                 status_text = app.update_manual_display(result, alignment_status)
                 view = fit_cover_to_canvas(display, screen_w, screen_h)
                 view = draw_manual_hud(view, status_text)
+            elif app.state == "program_live":
+                frame = picam2.capture_array()
+                params = edge_detect.get_params()
+                result = edge_detect.detect_parallel_edges_and_width(frame, params)
+                display = draw_detection_overlay(frame.copy(), result, params)
+                alignment_status = edge_detect.get_center_alignment_status(display, result)
+                status_text = app.update_program_live_display(result, alignment_status)
+                view = fit_cover_to_canvas(display, screen_w, screen_h)
+                view = draw_program_live_hud(view, status_text)
             else:
                 frame = picam2.capture_array()
                 params = edge_detect.get_params()

@@ -1,0 +1,6 @@
+{
+  "WIDTH_DEVICE_API_BASE": "https://width-tracker.vercel.app",
+  "WIDTH_DEVICE_TOKEN": "wtk_your_device_token",
+  "WIDTH_OPERATOR_NAME": "Operator 1",
+  "WIDTH_LOCAL_TIMEZONE": "Asia/Colombo"
+}

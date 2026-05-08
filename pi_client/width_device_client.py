@@ -12,20 +12,55 @@ Replace capture_width_for_label() with sensor integration when the device hardwa
 from __future__ import annotations
 
 import os
+import json
 import sys
 import time
 import uuid
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
 from typing import Any
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+try:
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+except ImportError:  # Python < 3.9 fallback for local testing.
+    ZoneInfo = None
+
+    class ZoneInfoNotFoundError(Exception):
+        pass
 
 import requests
 
 
-API_BASE = os.getenv("WIDTH_DEVICE_API_BASE", "http://localhost:3000").rstrip("/")
-DEVICE_TOKEN = os.getenv("WIDTH_DEVICE_TOKEN", "")
-OPERATOR_NAME = os.getenv("WIDTH_OPERATOR_NAME", "")
-LOCAL_TIMEZONE = os.getenv("WIDTH_LOCAL_TIMEZONE", "Asia/Colombo")
+CONFIG_PATH = Path(__file__).with_name("device_config.json")
+
+
+def load_device_config() -> dict[str, str]:
+    if not CONFIG_PATH.exists():
+        return {}
+
+    try:
+        with CONFIG_PATH.open("r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+    if not isinstance(data, dict):
+        return {}
+
+    return {str(key): str(value) for key, value in data.items() if value is not None}
+
+
+DEVICE_CONFIG = load_device_config()
+
+
+def config_value(key: str, default: str = "") -> str:
+    return os.getenv(key) or DEVICE_CONFIG.get(key, default)
+
+
+API_BASE = config_value("WIDTH_DEVICE_API_BASE", "http://localhost:3000").rstrip("/")
+DEVICE_TOKEN = config_value("WIDTH_DEVICE_TOKEN")
+OPERATOR_NAME = config_value("WIDTH_OPERATOR_NAME")
+LOCAL_TIMEZONE = config_value("WIDTH_LOCAL_TIMEZONE", "Asia/Colombo")
 
 
 class DeviceClientError(RuntimeError):
@@ -59,10 +94,14 @@ def fetch_programs() -> dict[str, Any]:
 
 
 def local_timestamp_iso() -> str:
-    try:
-        tzinfo = ZoneInfo(LOCAL_TIMEZONE)
-    except ZoneInfoNotFoundError:
-        tzinfo = timezone(timedelta(hours=5, minutes=30))
+    if ZoneInfo is not None:
+        try:
+            tzinfo = ZoneInfo(LOCAL_TIMEZONE)
+            return datetime.now(tzinfo).isoformat()
+        except ZoneInfoNotFoundError:
+            pass
+
+    tzinfo = timezone(timedelta(hours=5, minutes=30))
     return datetime.now(tzinfo).isoformat()
 
 
