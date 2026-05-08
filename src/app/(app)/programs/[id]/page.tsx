@@ -64,6 +64,18 @@ export default async function ProgramDetailPage({ params }: ProgramDetailPagePro
             <dd>{program.required_data_points_per_measurement}</dd>
           </div>
           <div>
+            <dt>Nominal width</dt>
+            <dd>{program.nominal_width ?? "Not set"}</dd>
+          </div>
+          <div>
+            <dt>Upper tolerance</dt>
+            <dd>{program.upper_tolerance ?? "Not set"}</dd>
+          </div>
+          <div>
+            <dt>Lower tolerance</dt>
+            <dd>{program.lower_tolerance ?? "Not set"}</dd>
+          </div>
+          <div>
             <dt>Created</dt>
             <dd>{formatDateTime(program.created_at)}</dd>
           </div>

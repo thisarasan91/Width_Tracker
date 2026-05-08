@@ -108,6 +108,8 @@ class WidthCloudApp:
         self.upload_thread: threading.Thread | None = None
         self.upload_result: dict[str, Any] | None = None
         self.upload_error = ""
+        self.send_to_cloud_enabled = True
+        self.cloud_toggle_locked = False
 
     def build_manual_program(self) -> dict[str, Any]:
         return {
@@ -128,6 +130,15 @@ class WidthCloudApp:
         self.capture_samples = []
         self.awaiting_tape_removal = False
         self.removal_started_at = None
+
+    def reset_program_state(self) -> None:
+        self.readings = []
+        self.current_index = 0
+        self.upload_result = None
+        self.upload_error = ""
+        self.send_to_cloud_enabled = True
+        self.cloud_toggle_locked = False
+        self.reset_capture_state()
 
     def load_programs(self) -> None:
         try:
@@ -155,20 +166,17 @@ class WidthCloudApp:
             self.load_programs()
         elif action == "manual":
             self.selected_program = self.build_manual_program()
-            self.readings = []
-            self.current_index = 0
-            self.upload_result = None
-            self.upload_error = ""
-            self.reset_capture_state()
+            self.reset_program_state()
             self.message = "Manual live width"
             self.state = "manual_live"
         elif action == "program":
             self.selected_program = value
-            self.readings = []
-            self.current_index = 0
-            self.reset_capture_state()
+            self.reset_program_state()
             self.message = "Review expected measurement sequence"
             self.state = "sequence"
+        elif action == "toggle_cloud":
+            if not self.cloud_toggle_locked:
+                self.send_to_cloud_enabled = not self.send_to_cloud_enabled
         elif action == "next_page":
             self.program_page += 1
         elif action == "prev_page":
@@ -178,12 +186,11 @@ class WidthCloudApp:
             self.reset_capture_state()
         elif action == "abort":
             self.selected_program = None
-            self.readings = []
-            self.current_index = 0
-            self.reset_capture_state()
+            self.reset_program_state()
             self.message = "Measurement cancelled. No values sent."
             self.state = "programs"
         elif action == "start":
+            self.cloud_toggle_locked = True
             self.state = "measuring"
             self.message = "Position tape for first reading"
             self.reset_capture_state()
@@ -191,11 +198,7 @@ class WidthCloudApp:
             self.start_upload()
         elif action == "new_measurement":
             self.selected_program = None
-            self.readings = []
-            self.current_index = 0
-            self.upload_result = None
-            self.upload_error = ""
-            self.reset_capture_state()
+            self.reset_program_state()
             self.state = "programs"
 
     def current_label(self) -> str:
@@ -222,6 +225,10 @@ class WidthCloudApp:
             if self.selected_program.get("manual"):
                 self.state = "manual_complete"
                 self.message = "Manual measurement complete"
+                return
+            if not self.send_to_cloud_enabled:
+                self.state = "local_complete"
+                self.message = "Measurement complete. Cloud sending off."
                 return
             self.start_upload()
         else:
@@ -340,6 +347,29 @@ class WidthCloudApp:
 
         remaining = max(1, math.ceil(COUNTDOWN_SECONDS - elapsed))
         return f"Stabilized, getting data, {remaining}"
+
+    def tolerance_status(self, value: float | None) -> str:
+        if value is None or not self.selected_program or self.latest_unit != "mm":
+            return "unknown"
+
+        try:
+            nominal = float(self.selected_program.get("nominal_width"))
+            upper = float(self.selected_program.get("upper_tolerance"))
+            lower = float(self.selected_program.get("lower_tolerance"))
+        except (TypeError, ValueError):
+            return "unknown"
+
+        min_allowed = nominal - lower
+        max_allowed = nominal + upper
+        return "in" if min_allowed <= value <= max_allowed else "out"
+
+    def tolerance_color(self, value: float | None) -> tuple[int, int, int]:
+        status = self.tolerance_status(value)
+        if status == "in":
+            return COLOR_SUCCESS
+        if status == "out":
+            return COLOR_DANGER
+        return COLOR_TEXT
 
     def _line_angle_from_vertical_degrees(self, line: tuple[tuple[int, int], tuple[int, int]] | None) -> float | None:
         if line is None:
@@ -499,9 +529,15 @@ def render_sequence_screen(width: int, height: int) -> np.ndarray:
     draw_text(img, f"{program['required_data_points_per_measurement']} readings required", (32, 92), 0.65, COLOR_WARNING, 2)
     if program.get("manual"):
         draw_text(img, "Manual values are not uploaded to cloud.", (32, 124), 0.52, COLOR_TEXT, 1)
+    else:
+        toggle_color = COLOR_SUCCESS if app.send_to_cloud_enabled else COLOR_BUTTON_ALT
+        toggle_text = "Cloud Send: ON" if app.send_to_cloud_enabled else "Cloud Send: OFF"
+        toggle_rect = (width - 285, 112, width - 30, 166)
+        draw_button(img, toggle_rect, toggle_text, "Locked after Start", toggle_color)
+        app.click_targets.append(ClickTarget("toggle_cloud", toggle_rect))
 
     labels = program["labels_for_each_reading"]
-    y = 158 if program.get("manual") else 140
+    y = 158 if program.get("manual") else 190
     for index, label in enumerate(labels, start=1):
         draw_text(img, f"{index}. {label}", (46, y), 0.62, COLOR_TEXT, 2)
         y += 38
@@ -560,6 +596,8 @@ def draw_measurement_hud(display: np.ndarray, status_text: str) -> np.ndarray:
     title = "Manual" if program.get("manual") else program["program_name"]
     draw_text(display, f"TB Meter | {title}"[:34], (16, 30), 0.62, COLOR_TEXT, 2)
     draw_text(display, f"{progress}: {label}"[:34], (16, 66), 0.78, COLOR_WARNING, 2)
+    cloud_text = "Cloud ON" if app.send_to_cloud_enabled else "Cloud OFF"
+    draw_text(display, cloud_text, (width - 250, 32), 0.52, COLOR_SUCCESS if app.send_to_cloud_enabled else COLOR_WARNING, 2)
 
     status_color = COLOR_SUCCESS if "Stabilized" in status_text or "Captured" in status_text else COLOR_TEXT
     draw_text(display, status_text[:36], (16, 104), 0.66, status_color, 2)
@@ -570,7 +608,7 @@ def draw_measurement_hud(display: np.ndarray, status_text: str) -> np.ndarray:
             f"Live width: {app.latest_width:.3f} {app.latest_unit}",
             (width - 335, 108),
             0.58,
-            COLOR_TEXT,
+            app.tolerance_color(app.latest_width),
             2,
         )
 
@@ -585,12 +623,13 @@ def draw_measurement_hud(display: np.ndarray, status_text: str) -> np.ndarray:
     x = 16
     y = display.shape[0] - 18
     for reading in app.readings[-2:]:
+        reading_value = float(reading["reading_value"])
         draw_text(
             display,
             f"{reading['reading_label'][:14]}: {reading['reading_value']} {reading['unit']}"[:32],
             (x, y),
             0.46,
-            COLOR_SUCCESS,
+            app.tolerance_color(reading_value),
             1,
         )
         x += 350
@@ -713,6 +752,9 @@ def main() -> int:
                 else:
                     detail = "No values uploaded"
                 view = render_status_screen(screen_w, screen_h, "Manual measurement complete", detail)
+            elif app.state == "local_complete":
+                detail = f"{len(app.readings)} readings captured. Cloud sending was OFF."
+                view = render_status_screen(screen_w, screen_h, "Measurement complete", detail)
             elif app.state == "upload_failed":
                 view = render_status_screen(screen_w, screen_h, "Upload failed, retry required", app.upload_error, failed=True)
             elif app.state == "manual_live":

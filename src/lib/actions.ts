@@ -35,6 +35,16 @@ function parseRequiredDataPoints(formData: FormData) {
   return Number.isInteger(value) && value > 0 ? value : null;
 }
 
+function parseOptionalNumber(formData: FormData, key: string) {
+  const rawValue = asText(formData, key);
+  if (!rawValue) {
+    return null;
+  }
+
+  const value = Number(rawValue);
+  return Number.isFinite(value) ? value : Number.NaN;
+}
+
 function errorState(error: unknown, fallback: string): ActionState {
   if (error instanceof Error && error.message) {
     return {
@@ -235,12 +245,26 @@ export async function createProgramAction(
       };
     }
 
+    const nominalWidth = parseOptionalNumber(formData, "nominal_width");
+    const upperTolerance = parseOptionalNumber(formData, "upper_tolerance");
+    const lowerTolerance = parseOptionalNumber(formData, "lower_tolerance");
+
+    if ([nominalWidth, upperTolerance, lowerTolerance].some((value) => Number.isNaN(value))) {
+      return {
+        ok: false,
+        message: "Nominal width and tolerances must be valid numbers."
+      };
+    }
+
     const supabase = await createClient();
     const { error } = await supabase.from("programs").insert({
       program_name: programName,
       batch_name: asOptionalText(formData, "batch_name"),
       elastic_development_reference: asOptionalText(formData, "elastic_development_reference"),
       description: asOptionalText(formData, "description"),
+      nominal_width: nominalWidth,
+      upper_tolerance: upperTolerance,
+      lower_tolerance: lowerTolerance,
       required_data_points_per_measurement: requiredCount,
       labels_for_each_reading: labels,
       is_active: formData.get("is_active") === "on",
@@ -288,6 +312,17 @@ export async function updateProgramAction(
       };
     }
 
+    const nominalWidth = parseOptionalNumber(formData, "nominal_width");
+    const upperTolerance = parseOptionalNumber(formData, "upper_tolerance");
+    const lowerTolerance = parseOptionalNumber(formData, "lower_tolerance");
+
+    if ([nominalWidth, upperTolerance, lowerTolerance].some((value) => Number.isNaN(value))) {
+      return {
+        ok: false,
+        message: "Nominal width and tolerances must be valid numbers."
+      };
+    }
+
     const supabase = await createClient();
     const { error } = await supabase
       .from("programs")
@@ -296,6 +331,9 @@ export async function updateProgramAction(
         batch_name: asOptionalText(formData, "batch_name"),
         elastic_development_reference: asOptionalText(formData, "elastic_development_reference"),
         description: asOptionalText(formData, "description"),
+        nominal_width: nominalWidth,
+        upper_tolerance: upperTolerance,
+        lower_tolerance: lowerTolerance,
         required_data_points_per_measurement: requiredCount,
         labels_for_each_reading: labels,
         is_active: formData.get("is_active") === "on"

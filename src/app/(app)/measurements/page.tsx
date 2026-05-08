@@ -1,14 +1,12 @@
 import { Download } from "lucide-react";
-import { StatusBadge } from "@/components/StatusBadge";
-import { updateMeasurementStatusAction } from "@/lib/actions";
 import { createClient } from "@/lib/supabase/server";
-import { formatDateTime, formatNumber } from "@/lib/format";
+import { formatCompactDateTime, formatNumber } from "@/lib/format";
 import {
   buildFilterQueryString,
   localInputToTimestamptz,
   readMeasurementFilters
 } from "@/lib/measurementFilters";
-import type { Device, Measurement, Program, VerificationStatus } from "@/lib/types";
+import type { Device, Measurement, Program } from "@/lib/types";
 
 type MeasurementsPageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -132,56 +130,26 @@ export default async function MeasurementsPage({ searchParams }: MeasurementsPag
             <h2>Filtered readings</h2>
           </div>
         </div>
-        <div className="table-wrap">
-          <table>
+        <div className="table-wrap report-table-wrap">
+          <table className="compact-table">
             <thead>
               <tr>
-                <th>Stored</th>
-                <th>Sent</th>
-                <th>Device</th>
-                <th>Program</th>
-                <th>Session</th>
+                <th>Date / Time</th>
+                <th>Station</th>
+                <th>Programme</th>
                 <th>Reading</th>
                 <th>Value</th>
-                <th>Operator</th>
-                <th>Status</th>
-                <th>Verify</th>
               </tr>
             </thead>
             <tbody>
               {measurements.map((measurement) => (
                 <tr key={measurement.id}>
-                  <td>{formatDateTime(measurement.stored_at)}</td>
-                  <td>{formatDateTime(measurement.sent_at)}</td>
+                  <td>{formatCompactDateTime(measurement.stored_at)}</td>
                   <td>{measurement.device?.device_name ?? "Unknown"}</td>
                   <td>{measurement.program?.program_name ?? "Unknown"}</td>
-                  <td>{measurement.measurement_session_id.slice(0, 8)}</td>
                   <td>{measurement.reading_label}</td>
                   <td>
                     {formatNumber(measurement.reading_value)} {measurement.unit}
-                  </td>
-                  <td>{measurement.operator_name ?? "Not set"}</td>
-                  <td>
-                    <StatusBadge status={measurement.cloud_verification_status} />
-                  </td>
-                  <td>
-                    <form action={updateMeasurementStatusAction}>
-                      <input type="hidden" name="measurement_id" value={measurement.id} />
-                      <select
-                        aria-label="Cloud verification status"
-                        name="cloud_verification_status"
-                        defaultValue={measurement.cloud_verification_status}
-                      >
-                        {(["stored", "pending", "failed"] satisfies VerificationStatus[]).map((status) => (
-                          <option key={status} value={status}>
-                            {status}
-                          </option>
-                        ))}
-                      </select>
-                      <button className="button secondary" type="submit">
-                        Save
-                      </button>
-                    </form>
                   </td>
                 </tr>
               ))}

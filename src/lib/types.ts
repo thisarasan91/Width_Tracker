@@ -19,6 +19,9 @@ export type Program = {
   batch_name: string | null;
   elastic_development_reference: string | null;
   description: string | null;
+  nominal_width: number | string | null;
+  upper_tolerance: number | string | null;
+  lower_tolerance: number | string | null;
   required_data_points_per_measurement: number;
   labels_for_each_reading: string[];
   is_active: boolean;

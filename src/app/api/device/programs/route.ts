@@ -82,6 +82,9 @@ export async function GET(request: Request) {
         batch_name: program.batch_name,
         elastic_development_reference: program.elastic_development_reference,
         description: program.description,
+        nominal_width: program.nominal_width,
+        upper_tolerance: program.upper_tolerance,
+        lower_tolerance: program.lower_tolerance,
         required_data_points_per_measurement: program.required_data_points_per_measurement,
         labels_for_each_reading: program.labels_for_each_reading
       };

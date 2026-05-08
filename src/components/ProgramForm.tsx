@@ -56,6 +56,39 @@ export function ProgramForm({ program }: ProgramFormProps) {
             defaultValue={program?.required_data_points_per_measurement ?? 6}
           />
         </label>
+        <label>
+          Nominal width
+          <input
+            name="nominal_width"
+            min={0}
+            step="0.0001"
+            type="number"
+            defaultValue={program?.nominal_width ?? ""}
+            placeholder="12.500"
+          />
+        </label>
+        <label>
+          Upper tolerance
+          <input
+            name="upper_tolerance"
+            min={0}
+            step="0.0001"
+            type="number"
+            defaultValue={program?.upper_tolerance ?? ""}
+            placeholder="0.100"
+          />
+        </label>
+        <label>
+          Lower tolerance
+          <input
+            name="lower_tolerance"
+            min={0}
+            step="0.0001"
+            type="number"
+            defaultValue={program?.lower_tolerance ?? ""}
+            placeholder="0.100"
+          />
+        </label>
         <label className="full-width">
           Description
           <textarea name="description" rows={3} defaultValue={program?.description ?? ""} />

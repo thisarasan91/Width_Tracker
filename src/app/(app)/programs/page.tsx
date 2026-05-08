@@ -37,6 +37,7 @@ export default async function ProgramsPage() {
                 <th>Batch</th>
                 <th>EDR</th>
                 <th>Required readings</th>
+                <th>Nominal</th>
                 <th>Status</th>
                 <th>Created</th>
                 <th>Open</th>
@@ -49,6 +50,7 @@ export default async function ProgramsPage() {
                   <td>{program.batch_name ?? "Not set"}</td>
                   <td>{program.elastic_development_reference ?? "Not set"}</td>
                   <td>{program.required_data_points_per_measurement}</td>
+                  <td>{program.nominal_width ?? "Not set"}</td>
                   <td>
                     <StatusBadge status={program.is_active ? "active" : "inactive"} />
                   </td>

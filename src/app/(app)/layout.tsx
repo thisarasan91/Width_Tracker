@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Activity, Cpu, Database, Gauge, LogOut, ScrollText } from "lucide-react";
+import { Activity, BarChart3, Cpu, Database, Gauge, LogOut, ScrollText } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { signOutAction } from "@/lib/actions";
 
@@ -32,6 +32,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <Link className="nav-link" href="/measurements">
             <Database aria-hidden="true" className="icon" />
             Measurements
+          </Link>
+          <Link className="nav-link" href="/reports">
+            <BarChart3 aria-hidden="true" className="icon" />
+            Reports
           </Link>
         </nav>
 

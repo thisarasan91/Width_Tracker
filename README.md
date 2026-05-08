@@ -62,6 +62,7 @@ Or paste each migration into the Supabase SQL editor:
 
 - `supabase/migrations/202605030001_initial_schema.sql`
 - `supabase/migrations/202605030002_rls_policies.sql`
+- `supabase/migrations/202605080001_program_tolerances.sql`
 
 The schema includes:
 
@@ -80,7 +81,8 @@ The schema includes:
 3. Copy the one-time device token shown after creation.
 4. Create a program on `/programs`.
 5. Set `required_data_points_per_measurement`.
-6. Enter one reading label per line, for example:
+6. Set nominal width, upper tolerance, and lower tolerance when tolerance checks are needed on the Pi.
+7. Enter one reading label per line, for example:
 
    ```text
    Tape 1 Left
@@ -91,9 +93,10 @@ The schema includes:
    Tape 3 Right
    ```
 
-7. Open the device detail page and assign one or more active programs.
-8. View uploaded readings on `/measurements`.
-9. Export CSV from `/measurements` with the Export CSV button.
+8. Open the device detail page and assign one or more active programs.
+9. View uploaded readings on `/measurements`.
+10. Use `/reports` for live width-vs-time graphs, filtered CSV export, and PDF reports.
+11. Export CSV from `/measurements` with the Export CSV button.
 
 ## Device API
 
@@ -212,6 +215,8 @@ export WIDTH_LOCAL_TIMEZONE=Asia/Colombo
 ```
 
 For assigned programs, each captured reading is the average of the latest 3 stable camera readings. After each capture, the Pi waits for the current tape to be removed before prompting `Place next tape` for the next label.
+
+Assigned programs also show a `Cloud Send` toggle before starting measurement. When it is off, readings are measured locally with tolerance coloring, but nothing is uploaded. Once measurement starts, the toggle is locked for that cycle.
 
 The older terminal prompt example is still available:
 

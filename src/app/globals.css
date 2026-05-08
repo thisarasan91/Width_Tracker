@@ -243,6 +243,65 @@ table {
   border-collapse: collapse;
 }
 
+.compact-table th,
+.compact-table td {
+  padding: 7px 8px;
+  font-size: 0.86rem;
+}
+
+.report-table-wrap {
+  max-height: 340px;
+  overflow: auto;
+}
+
+.chart-wrap {
+  margin-top: 16px;
+  width: 100%;
+  overflow-x: auto;
+}
+
+.chart-wrap svg {
+  display: block;
+  width: 100%;
+  min-width: 640px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fbfcfd;
+}
+
+.chart-axis {
+  stroke: #667085;
+  stroke-width: 1.5;
+}
+
+.chart-line {
+  stroke: var(--primary);
+  stroke-width: 3;
+}
+
+.chart-point {
+  fill: var(--accent);
+  stroke: #ffffff;
+  stroke-width: 2;
+}
+
+.chart-label {
+  fill: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0;
+}
+
+.chart-empty {
+  display: grid;
+  min-height: 280px;
+  place-items: center;
+  margin-top: 16px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: #fbfcfd;
+  color: var(--muted);
+}
+
 th,
 td {
   border-bottom: 1px solid var(--border);
