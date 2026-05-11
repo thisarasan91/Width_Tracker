@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+import { MeasurementsAutoRefresh } from "@/components/MeasurementsAutoRefresh";
 import { StatusBadge } from "@/components/StatusBadge";
 import { createClient } from "@/lib/supabase/server";
-import { effectiveDeviceStatus, formatDateTime, formatNumber } from "@/lib/format";
+import { effectiveDeviceStatus, formatCompactDateTime, formatDateTime, formatNumber } from "@/lib/format";
 import type { Device, Measurement, Program } from "@/lib/types";
 
 export default async function DashboardPage() {
@@ -35,6 +36,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="page-stack">
+      <MeasurementsAutoRefresh channelName="dashboard-measurements-live-refresh" />
       <header className="page-header">
         <div>
           <p className="eyebrow">Factory Overview</p>
@@ -116,30 +118,26 @@ export default async function DashboardPage() {
             <ArrowRight aria-hidden="true" className="icon" />
           </Link>
         </div>
-        <div className="table-wrap">
-          <table>
+        <div className="table-wrap report-table-wrap">
+          <table className="compact-table">
             <thead>
               <tr>
-                <th>Stored</th>
-                <th>Device</th>
-                <th>Program</th>
+                <th>Date / Time</th>
+                <th>Station</th>
+                <th>Programme</th>
                 <th>Reading</th>
                 <th>Value</th>
-                <th>Cloud status</th>
               </tr>
             </thead>
             <tbody>
               {measurements.map((measurement) => (
                 <tr key={measurement.id}>
-                  <td>{formatDateTime(measurement.stored_at)}</td>
+                  <td>{formatCompactDateTime(measurement.stored_at)}</td>
                   <td>{measurement.device?.device_name ?? "Unknown"}</td>
                   <td>{measurement.program?.program_name ?? "Unknown"}</td>
                   <td>{measurement.reading_label}</td>
                   <td>
                     {formatNumber(measurement.reading_value)} {measurement.unit}
-                  </td>
-                  <td>
-                    <StatusBadge status={measurement.cloud_verification_status} />
                   </td>
                 </tr>
               ))}

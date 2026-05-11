@@ -1,4 +1,5 @@
 import { Download } from "lucide-react";
+import { MeasurementsAutoRefresh } from "@/components/MeasurementsAutoRefresh";
 import { createClient } from "@/lib/supabase/server";
 import { formatCompactDateTime, formatNumber } from "@/lib/format";
 import {
@@ -63,6 +64,7 @@ export default async function MeasurementsPage({ searchParams }: MeasurementsPag
 
   return (
     <div className="page-stack">
+      <MeasurementsAutoRefresh channelName="measurements-page-live-refresh" />
       <header className="page-header">
         <div>
           <p className="eyebrow">Cloud Verification</p>

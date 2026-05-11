@@ -25,6 +25,7 @@ export default async function DeviceDetailPage({ params }: DeviceDetailPageProps
       .from("device_program_assignments")
       .select("*, program:programs(*)")
       .eq("device_id", id)
+      .eq("is_active", true)
       .order("assigned_at", { ascending: false }),
     supabase.from("programs").select("*").eq("is_active", true).order("program_name"),
     supabase
@@ -40,13 +41,17 @@ export default async function DeviceDetailPage({ params }: DeviceDetailPageProps
   }
 
   const device = deviceResult.data as Device;
-  const assignments = (assignmentsResult.data ?? []) as Array<{
-    id: string;
-    assigned_at: string;
-    is_active: boolean;
-    program_id: string;
-    program: Program | null;
-  }>;
+  const stationNumber =
+    device.device_name.match(/\d+/)?.[0] ?? device.serial_number.match(/\d+/)?.[0] ?? device.serial_number;
+  const assignments = (
+    (assignmentsResult.data ?? []) as Array<{
+      id: string;
+      assigned_at: string;
+      is_active: boolean;
+      program_id: string;
+      program: Program | null;
+    }>
+  ).filter((assignment) => assignment.is_active && assignment.program?.is_active);
   const programs = (programsResult.data ?? []) as Program[];
   const measurements = (measurementsResult.data ?? []) as Array<
     Measurement & {
@@ -93,7 +98,7 @@ export default async function DeviceDetailPage({ params }: DeviceDetailPageProps
         <div className="section-heading">
           <div>
             <p className="eyebrow">Assigned Programs</p>
-            <h2>Programs available to this Pi</h2>
+            <h2>Programs available to Station #{stationNumber}</h2>
           </div>
         </div>
         <div className="table-wrap">
@@ -103,7 +108,6 @@ export default async function DeviceDetailPage({ params }: DeviceDetailPageProps
                 <th>Program</th>
                 <th>Readings</th>
                 <th>Assigned</th>
-                <th>Status</th>
                 <th>Action</th>
               </tr>
             </thead>
@@ -120,28 +124,21 @@ export default async function DeviceDetailPage({ params }: DeviceDetailPageProps
                   <td>{assignment.program?.required_data_points_per_measurement ?? "-"}</td>
                   <td>{formatDateTime(assignment.assigned_at)}</td>
                   <td>
-                    <StatusBadge status={assignment.is_active ? "active" : "inactive"} />
-                  </td>
-                  <td>
-                    {assignment.is_active ? (
-                      <form action={deactivateAssignmentAction}>
-                        <input type="hidden" name="assignment_id" value={assignment.id} />
-                        <input type="hidden" name="device_id" value={device.id} />
-                        <button className="button danger" type="submit">
-                          <XCircle aria-hidden="true" className="icon" />
-                          Deactivate
-                        </button>
-                      </form>
-                    ) : (
-                      "No action"
-                    )}
+                    <form action={deactivateAssignmentAction}>
+                      <input type="hidden" name="assignment_id" value={assignment.id} />
+                      <input type="hidden" name="device_id" value={device.id} />
+                      <button className="button danger" type="submit">
+                        <XCircle aria-hidden="true" className="icon" />
+                        Deactivate
+                      </button>
+                    </form>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        {assignments.length === 0 ? <p className="empty-state">No programs are assigned to this device yet.</p> : null}
+        {assignments.length === 0 ? <p className="empty-state">No active programs are assigned to this device yet.</p> : null}
       </section>
 
       <section className="panel">

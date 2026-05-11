@@ -1,5 +1,5 @@
 import type { Measurement } from "@/lib/types";
-import { getDisplayTimeZone } from "@/lib/format";
+import { formatNumber, getDisplayTimeZone } from "@/lib/format";
 
 type MeasurementExportRow = Measurement & {
   device?: {
@@ -40,46 +40,19 @@ function formatCsvDateTime(value: string | null | undefined) {
     minute: "2-digit",
     second: "2-digit",
     hour12: false,
-    timeZone: getDisplayTimeZone(),
-    timeZoneName: "short"
+    timeZone: getDisplayTimeZone()
   }).format(new Date(value));
 }
 
 export function measurementsToCsv(rows: MeasurementExportRow[]) {
-  const headers = [
-    "measurement_id",
-    "measurement_session_id",
-    "device_name",
-    "serial_number",
-    "program_name",
-    "batch_name",
-    "elastic_development_reference",
-    "reading_label",
-    "reading_value",
-    "unit",
-    "operator_name",
-    "loom_name",
-    "sent_at",
-    "stored_at",
-    "cloud_verification_status"
-  ];
+  const headers = ["Date / Time", "Station", "Program", "Reading", "Value"];
 
   const body = rows.map((row) => [
-    row.id,
-    row.measurement_session_id,
-    row.device?.device_name,
-    row.device?.serial_number,
-    row.program?.program_name,
-    row.program?.batch_name,
-    row.program?.elastic_development_reference,
-    row.reading_label,
-    row.reading_value,
-    row.unit,
-    row.operator_name,
-    row.loom_name ?? row.device?.loom_name,
-    formatCsvDateTime(row.sent_at),
     formatCsvDateTime(row.stored_at),
-    row.cloud_verification_status
+    row.device?.device_name,
+    row.program?.program_name,
+    row.reading_label,
+    `${formatNumber(row.reading_value)} ${row.unit}`
   ]);
 
   return [headers, ...body].map((line) => line.map(escapeCsv).join(",")).join("\r\n");
