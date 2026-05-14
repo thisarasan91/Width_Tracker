@@ -161,16 +161,18 @@ def upload_measurement(
     program: dict[str, Any],
     readings: list[dict[str, Any]],
     loom_name: str | None,
+    measurement_session_id: str | None = None,
+    sent_at: str | None = None,
 ) -> dict[str, Any]:
     payload = {
         "assignment_id": program["assignment_id"],
         "program_id": program["program_id"],
-        "measurement_session_id": str(uuid.uuid4()),
+        "measurement_session_id": measurement_session_id or str(uuid.uuid4()),
         "readings": readings,
         "unit": "mm",
         "operator_name": OPERATOR_NAME or None,
         "loom_name": loom_name,
-        "sent_at": local_timestamp_iso(),
+        "sent_at": sent_at or local_timestamp_iso(),
     }
 
     response = requests.post(

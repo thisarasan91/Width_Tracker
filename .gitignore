@@ -10,3 +10,6 @@ coverage
 __pycache__/
 *.pyc
 pi_client/device_config.json
+pi_client/local_measurements_queue.jsonl
+pi_client/measurement_log.csv
+pi_client/program_cache.json

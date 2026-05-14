@@ -11,10 +11,14 @@ from __future__ import annotations
 
 import os
 import json
+import csv
 import math
+import subprocess
 import threading
 import time
+import uuid
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import cv2
@@ -22,10 +26,19 @@ import numpy as np
 import requests
 
 import edge_detect
-from width_device_client import DeviceClientError, fetch_programs, upload_measurement
+from width_device_client import DeviceClientError, fetch_programs, local_timestamp_iso, upload_measurement
 
 
 WINDOW_CLOUD = "TB Meter"
+APP_DIR = Path(__file__).resolve().parent
+LOCAL_QUEUE_PATH = Path(os.getenv("WIDTH_LOCAL_QUEUE_PATH", str(APP_DIR / "local_measurements_queue.jsonl")))
+MEASUREMENT_LOG_PATH = Path(os.getenv("WIDTH_MEASUREMENT_LOG_PATH", str(APP_DIR / "measurement_log.csv")))
+PROGRAM_CACHE_PATH = Path(os.getenv("WIDTH_PROGRAM_CACHE_PATH", str(APP_DIR / "program_cache.json")))
+SPLASH_IMAGE_PATH = Path(os.getenv("WIDTH_SPLASH_IMAGE_PATH", str(APP_DIR / "splash_image.png")))
+LOCAL_SYNC_INTERVAL_SECONDS = float(os.getenv("WIDTH_LOCAL_SYNC_INTERVAL_SECONDS", "20"))
+INACTIVITY_SHUTDOWN_SECONDS = float(os.getenv("WIDTH_INACTIVITY_SHUTDOWN_SECONDS", "180"))
+SHUTDOWN_WARNING_SECONDS = float(os.getenv("WIDTH_SHUTDOWN_WARNING_SECONDS", "30"))
+ENABLE_AUTO_SHUTDOWN = os.getenv("WIDTH_ENABLE_AUTO_SHUTDOWN", "true").lower() != "false"
 
 STABLE_SECONDS = float(os.getenv("WIDTH_STABLE_SECONDS", "1.0"))
 COUNTDOWN_SECONDS = int(os.getenv("WIDTH_COUNTDOWN_SECONDS", "3"))
@@ -48,6 +61,26 @@ COLOR_DARK_TEXT = (20, 30, 40)
 COLOR_SUCCESS = (0, 190, 95)
 COLOR_WARNING = (0, 190, 255)
 COLOR_DANGER = (40, 40, 220)
+CSV_HEADERS = [
+    "measured_at",
+    "logged_at",
+    "source",
+    "measurement_session_id",
+    "device_name",
+    "serial_number",
+    "loom_name",
+    "program_name",
+    "batch_name",
+    "reading_label",
+    "reading_value",
+    "unit",
+    "cloud_status",
+    "rows_stored",
+]
+
+
+queue_lock = threading.RLock()
+csv_lock = threading.Lock()
 
 
 def parse_float(value: Any, default: float | None = None) -> float | None:
@@ -72,6 +105,188 @@ def read_settings_json() -> dict[str, Any]:
         return {}
 
     return data if isinstance(data, dict) else {}
+
+
+def save_program_cache(payload: dict[str, Any]) -> None:
+    try:
+        PROGRAM_CACHE_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def load_program_cache() -> dict[str, Any] | None:
+    try:
+        data = json.loads(PROGRAM_CACHE_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+    if not isinstance(data, dict) or not isinstance(data.get("programs"), list) or not isinstance(data.get("device"), dict):
+        return None
+
+    return data
+
+
+def program_snapshot(program: dict[str, Any]) -> dict[str, Any]:
+    keys = (
+        "assignment_id",
+        "program_id",
+        "program_name",
+        "batch_name",
+        "elastic_development_reference",
+        "description",
+        "nominal_width",
+        "upper_tolerance",
+        "lower_tolerance",
+        "required_data_points_per_measurement",
+        "labels_for_each_reading",
+    )
+    return {key: program.get(key) for key in keys}
+
+
+def append_measurement_csv(
+    device: dict[str, Any] | None,
+    program: dict[str, Any],
+    readings: list[dict[str, Any]],
+    measurement_session_id: str,
+    source: str,
+    cloud_status: str,
+    rows_stored: int | None = None,
+) -> None:
+    MEASUREMENT_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    logged_at = local_timestamp_iso()
+
+    with csv_lock:
+        file_exists = MEASUREMENT_LOG_PATH.exists() and MEASUREMENT_LOG_PATH.stat().st_size > 0
+        with MEASUREMENT_LOG_PATH.open("a", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=CSV_HEADERS)
+            if not file_exists:
+                writer.writeheader()
+            for reading in readings:
+                writer.writerow(
+                    {
+                        "measured_at": reading.get("measured_at") or logged_at,
+                        "logged_at": logged_at,
+                        "source": source,
+                        "measurement_session_id": measurement_session_id,
+                        "device_name": (device or {}).get("device_name"),
+                        "serial_number": (device or {}).get("serial_number"),
+                        "loom_name": (device or {}).get("loom_name"),
+                        "program_name": program.get("program_name"),
+                        "batch_name": program.get("batch_name"),
+                        "reading_label": reading.get("reading_label"),
+                        "reading_value": reading.get("reading_value"),
+                        "unit": reading.get("unit"),
+                        "cloud_status": cloud_status,
+                        "rows_stored": rows_stored or "",
+                    }
+                )
+
+
+def build_queue_payload(
+    device: dict[str, Any] | None,
+    program: dict[str, Any],
+    readings: list[dict[str, Any]],
+    measurement_session_id: str,
+    sent_at: str,
+    error: str,
+) -> dict[str, Any]:
+    return {
+        "queued_at": local_timestamp_iso(),
+        "last_error": error,
+        "measurement_session_id": measurement_session_id,
+        "sent_at": sent_at,
+        "loom_name": (device or {}).get("loom_name"),
+        "device": {
+            "id": (device or {}).get("id"),
+            "device_name": (device or {}).get("device_name"),
+            "serial_number": (device or {}).get("serial_number"),
+            "loom_name": (device or {}).get("loom_name"),
+        },
+        "program": program_snapshot(program),
+        "readings": readings,
+    }
+
+
+def append_local_queue(payload: dict[str, Any]) -> None:
+    LOCAL_QUEUE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with queue_lock:
+        with LOCAL_QUEUE_PATH.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(payload, separators=(",", ":")) + "\n")
+
+
+def read_local_queue() -> list[dict[str, Any]]:
+    if not LOCAL_QUEUE_PATH.exists():
+        return []
+
+    items: list[dict[str, Any]] = []
+    with queue_lock:
+        try:
+            lines = LOCAL_QUEUE_PATH.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            return []
+
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            item = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(item, dict):
+            items.append(item)
+    return items
+
+
+def write_local_queue(items: list[dict[str, Any]]) -> None:
+    with queue_lock:
+        if not items:
+            try:
+                LOCAL_QUEUE_PATH.unlink()
+            except FileNotFoundError:
+                pass
+            return
+
+        LOCAL_QUEUE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with LOCAL_QUEUE_PATH.open("w", encoding="utf-8") as handle:
+            for item in items:
+                handle.write(json.dumps(item, separators=(",", ":")) + "\n")
+
+
+def upload_queue_item(item: dict[str, Any]) -> dict[str, Any]:
+    program = item.get("program")
+    readings = item.get("readings")
+    if not isinstance(program, dict) or not isinstance(readings, list):
+        raise DeviceClientError("Invalid local queued measurement.")
+
+    return upload_measurement(
+        program,
+        readings,
+        item.get("loom_name"),
+        measurement_session_id=str(item.get("measurement_session_id") or ""),
+        sent_at=str(item.get("sent_at") or local_timestamp_iso()),
+    )
+
+
+def sync_local_queue_once() -> tuple[int, int]:
+    with queue_lock:
+        queued_items = read_local_queue()
+        if not queued_items:
+            return 0, 0
+
+        remaining: list[dict[str, Any]] = []
+        uploaded_count = 0
+
+        for item in queued_items:
+            try:
+                upload_queue_item(item)
+                uploaded_count += 1
+            except (DeviceClientError, requests.RequestException) as exc:
+                item["last_error"] = str(exc)
+                item["last_retry_at"] = local_timestamp_iso()
+                remaining.append(item)
+
+        write_local_queue(remaining)
+        return uploaded_count, len(remaining)
 
 
 def first_setting(data: dict[str, Any], *keys: str) -> Any:
@@ -263,6 +478,14 @@ class WidthCloudApp:
         self.upload_error = ""
         self.send_to_cloud_enabled = True
         self.cloud_toggle_locked = False
+        self.measurement_session_id: str | None = None
+        self.measurement_started_at: str | None = None
+        self.measurement_logged = False
+        self.sync_thread: threading.Thread | None = None
+        self.sync_message = ""
+        self.local_queue_count = len(read_local_queue())
+        self.last_activity_at = time.time()
+        self.shutdown_started = False
 
     def build_manual_program(self) -> dict[str, Any]:
         return {
@@ -291,19 +514,92 @@ class WidthCloudApp:
         self.upload_error = ""
         self.send_to_cloud_enabled = True
         self.cloud_toggle_locked = False
+        self.measurement_session_id = None
+        self.measurement_started_at = None
+        self.measurement_logged = False
         self.reset_capture_state()
+
+    def note_activity(self) -> None:
+        self.last_activity_at = time.time()
+        self.shutdown_started = False
+
+    def shutdown_warning_remaining(self) -> int | None:
+        if not ENABLE_AUTO_SHUTDOWN:
+            return None
+
+        elapsed = time.time() - self.last_activity_at
+        remaining = int(math.ceil(INACTIVITY_SHUTDOWN_SECONDS - elapsed))
+        if remaining <= int(SHUTDOWN_WARNING_SECONDS):
+            return max(0, remaining)
+        return None
+
+    def maybe_shutdown_for_inactivity(self) -> bool:
+        if not ENABLE_AUTO_SHUTDOWN or self.shutdown_started:
+            return False
+
+        if time.time() - self.last_activity_at < INACTIVITY_SHUTDOWN_SECONDS:
+            return False
+
+        self.shutdown_started = True
+        try:
+            subprocess.Popen(["sudo", "shutdown", "-h", "now"])
+        except OSError:
+            try:
+                subprocess.Popen(["shutdown", "-h", "now"])
+            except OSError:
+                return False
+        return True
+
+    def begin_measurement_session(self) -> None:
+        self.measurement_session_id = str(uuid.uuid4())
+        self.measurement_started_at = local_timestamp_iso()
+        self.measurement_logged = False
+
+    def session_sent_at(self) -> str:
+        for reading in self.readings:
+            measured_at = reading.get("measured_at")
+            if measured_at:
+                return str(measured_at)
+        return self.measurement_started_at or local_timestamp_iso()
+
+    def start_queue_sync(self) -> None:
+        if self.sync_thread and self.sync_thread.is_alive():
+            return
+
+        def worker() -> None:
+            while True:
+                uploaded_count, remaining_count = sync_local_queue_once()
+                self.local_queue_count = remaining_count
+                if uploaded_count:
+                    self.sync_message = f"Uploaded {uploaded_count} locally saved session(s)."
+                    if self.state == "programs":
+                        self.message = self.sync_message
+                elif remaining_count:
+                    self.sync_message = f"{remaining_count} session(s) saved locally."
+                time.sleep(LOCAL_SYNC_INTERVAL_SECONDS)
+
+        self.sync_thread = threading.Thread(target=worker, daemon=True)
+        self.sync_thread.start()
 
     def load_programs(self) -> None:
         try:
             payload = fetch_programs()
             self.device = payload["device"]
             self.programs = payload["programs"]
+            save_program_cache(payload)
             self.message = "Select assigned program"
             self.error_message = "" if self.programs else "No active programs assigned to this device."
         except (DeviceClientError, requests.RequestException) as exc:
-            self.programs = []
-            self.message = "Cloud connection failed"
-            self.error_message = str(exc)
+            cached_payload = load_program_cache()
+            if cached_payload:
+                self.device = cached_payload["device"]
+                self.programs = cached_payload["programs"]
+                self.message = "Cloud offline. Using cached programs."
+                self.error_message = "Measurements will save locally until internet returns."
+            else:
+                self.programs = []
+                self.message = "Cloud connection failed"
+                self.error_message = str(exc)
 
     def handle_click(self, x: int, y: int) -> None:
         for target in self.click_targets:
@@ -349,6 +645,8 @@ class WidthCloudApp:
                 self.state = "program_live"
                 self.message = "Cloud sending off. Live width only."
             else:
+                if self.selected_program and not self.selected_program.get("manual"):
+                    self.begin_measurement_session()
                 self.state = "measuring"
                 self.message = "Position tape for first reading"
         elif action == "retry_upload":
@@ -373,6 +671,7 @@ class WidthCloudApp:
                 "reading_label": label,
                 "reading_value": round(float(value), 4),
                 "unit": unit,
+                "measured_at": local_timestamp_iso(),
             }
         )
         self.current_index += 1
@@ -401,15 +700,53 @@ class WidthCloudApp:
         self.state = "uploading"
         self.upload_result = None
         self.upload_error = ""
+        program = program_snapshot(self.selected_program)
+        readings = [dict(reading) for reading in self.readings]
+        measurement_session_id = self.measurement_session_id or str(uuid.uuid4())
+        self.measurement_session_id = measurement_session_id
+        sent_at = self.session_sent_at()
+        device = dict(self.device)
 
         def worker() -> None:
             try:
-                self.upload_result = upload_measurement(
-                    self.selected_program,
-                    self.readings,
-                    self.device.get("loom_name"),
+                result = upload_measurement(
+                    program,
+                    readings,
+                    device.get("loom_name"),
+                    measurement_session_id=measurement_session_id,
+                    sent_at=sent_at,
                 )
-            except (DeviceClientError, requests.RequestException) as exc:
+                append_measurement_csv(
+                    device,
+                    program,
+                    readings,
+                    measurement_session_id,
+                    "cloud",
+                    "cloud_stored",
+                    result.get("rows_stored"),
+                )
+                self.upload_result = result
+            except requests.RequestException as exc:
+                payload = build_queue_payload(device, program, readings, measurement_session_id, sent_at, str(exc))
+                append_local_queue(payload)
+                append_measurement_csv(
+                    device,
+                    program,
+                    readings,
+                    measurement_session_id,
+                    "local",
+                    "saved_locally",
+                    None,
+                )
+                self.local_queue_count = len(read_local_queue())
+                self.upload_result = {
+                    "success": True,
+                    "local_saved": True,
+                    "message": "Measurement saved locally. Will upload when internet returns.",
+                    "measurement_session_id": measurement_session_id,
+                    "rows_stored": len(readings),
+                }
+            except DeviceClientError as exc:
                 self.upload_error = str(exc)
 
         self.upload_thread = threading.Thread(target=worker, daemon=True)
@@ -419,8 +756,12 @@ class WidthCloudApp:
         if self.state != "uploading":
             return
         if self.upload_result:
-            self.state = "uploaded"
-            self.message = "Measurement successfully stored"
+            if self.upload_result.get("local_saved"):
+                self.state = "local_saved"
+                self.message = "Measurement saved locally"
+            else:
+                self.state = "uploaded"
+                self.message = "Measurement successfully stored in cloud"
         elif self.upload_error:
             self.state = "upload_failed"
             self.message = "Upload failed, retry required"
@@ -628,6 +969,7 @@ app = WidthCloudApp()
 
 def mouse_callback(event: int, x: int, y: int, flags: int, param: Any) -> None:
     if event == cv2.EVENT_LBUTTONDOWN:
+        app.note_activity()
         app.handle_click(x, y)
 
 
@@ -664,14 +1006,53 @@ def blank_screen(width: int, height: int) -> np.ndarray:
     return img
 
 
+def load_splash_image(width: int, height: int) -> np.ndarray:
+    if SPLASH_IMAGE_PATH.exists():
+        splash = cv2.imread(str(SPLASH_IMAGE_PATH))
+        if splash is not None:
+            return fit_cover_to_canvas(splash, width, height)
+
+    img = blank_screen(width, height)
+    draw_text(img, "TB Meter", (width // 2 - 130, height // 2 - 20), 1.4, COLOR_TEXT, 4)
+    return img
+
+
+def render_splash_screen(width: int, height: int, status: str, progress: float) -> np.ndarray:
+    img = load_splash_image(width, height)
+    progress = clamp_float(progress, 0.0, 1.0)
+    overlay_h = 118
+    y1 = height - overlay_h
+    cv2.rectangle(img, (0, y1), (width, height), (20, 26, 32), -1)
+    draw_text(img, "TB Meter", (30, y1 + 34), 0.75, COLOR_TEXT, 2)
+    draw_text(img, status[:70], (30, y1 + 70), 0.55, COLOR_WARNING, 2)
+
+    bar_x1 = 30
+    bar_y1 = height - 32
+    bar_x2 = width - 30
+    bar_y2 = height - 16
+    cv2.rectangle(img, (bar_x1, bar_y1), (bar_x2, bar_y2), (60, 70, 80), -1)
+    fill_x2 = bar_x1 + int((bar_x2 - bar_x1) * progress)
+    cv2.rectangle(img, (bar_x1, bar_y1), (fill_x2, bar_y2), COLOR_SUCCESS, -1)
+    return img
+
+
+def show_splash(width: int, height: int, status: str, progress: float) -> None:
+    cv2.imshow(WINDOW_CLOUD, render_splash_screen(width, height, status, progress))
+    cv2.waitKey(1)
+
+
 def render_program_screen(width: int, height: int) -> np.ndarray:
     img = blank_screen(width, height)
     app.click_targets = []
 
     draw_text(img, "TB Meter", (30, 55), 1.2, COLOR_TEXT, 3)
     draw_text(img, app.message, (32, 92), 0.65, COLOR_WARNING if app.error_message else COLOR_TEXT, 2)
+    if app.local_queue_count:
+        draw_text(img, f"{app.local_queue_count} session(s) saved locally for upload", (32, 126), 0.48, COLOR_WARNING, 1)
+    elif app.sync_message:
+        draw_text(img, app.sync_message[:80], (32, 126), 0.48, COLOR_SUCCESS, 1)
     if app.error_message:
-        draw_text(img, app.error_message[:80], (32, 126), 0.48, COLOR_DANGER, 1)
+        draw_text(img, app.error_message[:80], (32, 156), 0.48, COLOR_DANGER, 1)
 
     refresh_rect = (width - 190, 24, width - 30, 74)
     draw_button(img, refresh_rect, "Refresh", "", COLOR_BUTTON_ALT)
@@ -943,6 +1324,18 @@ def render_uploading_screen(width: int, height: int) -> np.ndarray:
     return img
 
 
+def draw_shutdown_warning(display: np.ndarray, remaining_seconds: int) -> np.ndarray:
+    width = display.shape[1]
+    height = display.shape[0]
+    panel_h = 116
+    y1 = max(0, height - panel_h)
+    cv2.rectangle(display, (0, y1), (width, height), (20, 26, 32), -1)
+    cv2.rectangle(display, (0, y1), (width, y1 + 4), COLOR_DANGER, -1)
+    draw_text(display, f"App will shutdown in {remaining_seconds} sec", (28, y1 + 44), 0.82, COLOR_DANGER, 3)
+    draw_text(display, "Touch the screen to continue measuring", (30, y1 + 84), 0.58, COLOR_TEXT, 2)
+    return display
+
+
 def init_camera() -> Any:
     picam2 = edge_detect.Picamera2()
     picam2.configure(
@@ -958,10 +1351,6 @@ def init_camera() -> Any:
 
 def main() -> int:
     edge_detect.setup_external_display()
-    edge_detect.load_params_from_file()
-    load_alignment_settings()
-    app.load_programs()
-
     screen_w, screen_h = edge_detect.detect_screen_size()
     edge_detect.SCREEN_W = screen_w
     edge_detect.SCREEN_H = screen_h
@@ -972,7 +1361,21 @@ def main() -> int:
     cv2.setWindowProperty(WINDOW_CLOUD, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
     cv2.setMouseCallback(WINDOW_CLOUD, mouse_callback)
 
+    show_splash(screen_w, screen_h, "Loading camera settings...", 0.15)
+    edge_detect.load_params_from_file()
+    load_alignment_settings()
+
+    show_splash(screen_w, screen_h, "Connecting to cloud and loading assigned programs...", 0.35)
+    app.load_programs()
+
+    show_splash(screen_w, screen_h, "Starting local upload sync...", 0.5)
+    app.start_queue_sync()
+
+    show_splash(screen_w, screen_h, "Starting camera...", 0.7)
     picam2 = init_camera()
+    show_splash(screen_w, screen_h, "Ready", 1.0)
+    time.sleep(0.25)
+    app.note_activity()
 
     try:
         while True:
@@ -987,7 +1390,11 @@ def main() -> int:
                 view = render_uploading_screen(screen_w, screen_h)
             elif app.state == "uploaded":
                 rows = app.upload_result.get("rows_stored") if app.upload_result else len(app.readings)
-                view = render_status_screen(screen_w, screen_h, "Measurement successfully stored", f"Rows stored: {rows}")
+                view = render_status_screen(screen_w, screen_h, "Measurement stored in cloud", f"Rows stored: {rows}")
+            elif app.state == "local_saved":
+                rows = app.upload_result.get("rows_stored") if app.upload_result else len(app.readings)
+                detail = f"{rows} readings saved locally. Will upload when internet returns."
+                view = render_status_screen(screen_w, screen_h, "Measurement saved locally", detail)
             elif app.state == "manual_complete":
                 if app.readings:
                     reading = app.readings[-1]
@@ -1028,8 +1435,14 @@ def main() -> int:
                 view = fit_cover_to_canvas(display, screen_w, screen_h)
                 view = draw_measurement_hud(view, status_text)
 
+            warning_remaining = app.shutdown_warning_remaining()
+            if warning_remaining is not None:
+                view = draw_shutdown_warning(view, warning_remaining)
+
             cv2.imshow(WINDOW_CLOUD, view)
             key = cv2.waitKey(1) & 0xFF
+            if key != 255:
+                app.note_activity()
             if key == ord("q"):
                 break
             if key == ord("r") and app.state in {"programs", "upload_failed"}:
@@ -1044,6 +1457,8 @@ def main() -> int:
                     edge_detect.save_current_calibration(app.latest_result)
                 else:
                     edge_detect.open_calibration_input_window()
+            if app.maybe_shutdown_for_inactivity():
+                break
     except KeyboardInterrupt:
         pass
     finally:
