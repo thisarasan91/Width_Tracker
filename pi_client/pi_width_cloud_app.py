@@ -10,6 +10,7 @@ stability capture, countdown, and upload.
 from __future__ import annotations
 
 import os
+import json
 import math
 import threading
 import time
@@ -34,6 +35,9 @@ REQUIRE_CENTER_ALIGNMENT = os.getenv("WIDTH_REQUIRE_CENTER_ALIGNMENT", "true").l
 MANUAL_VERTICAL_ALIGNMENT_TOLERANCE_DEG = float(os.getenv("WIDTH_MANUAL_VERTICAL_TOLERANCE_DEG", "1.0"))
 REMOVAL_SECONDS = float(os.getenv("WIDTH_REMOVAL_SECONDS", "0.6"))
 AVERAGE_SAMPLE_COUNT = 3
+CENTER_ALIGNMENT_TOLERANCE_RATIO = float(os.getenv("WIDTH_CENTER_ALIGNMENT_TOLERANCE_RATIO", "0.03"))
+CENTER_ALIGNMENT_TOLERANCE_PX: float | None = None
+ANGLE_ALIGNMENT_TOLERANCE_DEG = float(os.getenv("WIDTH_ANGLE_ALIGNMENT_TOLERANCE_DEG", "2.0"))
 
 COLOR_BG = (30, 36, 43)
 COLOR_PANEL = (245, 248, 250)
@@ -44,6 +48,155 @@ COLOR_DARK_TEXT = (20, 30, 40)
 COLOR_SUCCESS = (0, 190, 95)
 COLOR_WARNING = (0, 190, 255)
 COLOR_DANGER = (40, 40, 220)
+
+
+def parse_float(value: Any, default: float | None = None) -> float | None:
+    if value is None or value == "":
+        return default
+
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def clamp_float(value: float, minimum: float, maximum: float) -> float:
+    return max(minimum, min(maximum, value))
+
+
+def read_settings_json() -> dict[str, Any]:
+    try:
+        with open(edge_detect.get_settings_path(), "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+    return data if isinstance(data, dict) else {}
+
+
+def first_setting(data: dict[str, Any], *keys: str) -> Any:
+    for key in keys:
+        if key in data:
+            return data[key]
+    return None
+
+
+def env_or_json_float(
+    env_key: str,
+    data: dict[str, Any],
+    json_keys: tuple[str, ...],
+    default: float,
+    minimum: float,
+    maximum: float,
+) -> float:
+    env_value = os.getenv(env_key)
+    raw_value = env_value if env_value not in (None, "") else first_setting(data, *json_keys)
+    parsed = parse_float(raw_value, default)
+    return clamp_float(parsed if parsed is not None else default, minimum, maximum)
+
+
+def load_alignment_settings() -> None:
+    global CENTER_ALIGNMENT_TOLERANCE_RATIO
+    global CENTER_ALIGNMENT_TOLERANCE_PX
+    global ANGLE_ALIGNMENT_TOLERANCE_DEG
+    global MANUAL_VERTICAL_ALIGNMENT_TOLERANCE_DEG
+
+    data = read_settings_json()
+
+    CENTER_ALIGNMENT_TOLERANCE_RATIO = env_or_json_float(
+        "WIDTH_CENTER_ALIGNMENT_TOLERANCE_RATIO",
+        data,
+        ("center_alignment_tolerance_ratio", "center_align_tolerance_ratio"),
+        CENTER_ALIGNMENT_TOLERANCE_RATIO,
+        0.001,
+        0.25,
+    )
+
+    center_px_env = os.getenv("WIDTH_CENTER_ALIGNMENT_TOLERANCE_PX")
+    center_px_raw = (
+        center_px_env
+        if center_px_env not in (None, "")
+        else first_setting(data, "center_alignment_tolerance_px", "center_align_tolerance_px")
+    )
+    center_px = parse_float(center_px_raw, None)
+    CENTER_ALIGNMENT_TOLERANCE_PX = center_px if center_px is not None and center_px > 0 else None
+
+    ANGLE_ALIGNMENT_TOLERANCE_DEG = env_or_json_float(
+        "WIDTH_ANGLE_ALIGNMENT_TOLERANCE_DEG",
+        data,
+        ("angle_alignment_tolerance_deg", "angle_align_tolerance_deg"),
+        ANGLE_ALIGNMENT_TOLERANCE_DEG,
+        0.1,
+        45.0,
+    )
+
+    MANUAL_VERTICAL_ALIGNMENT_TOLERANCE_DEG = env_or_json_float(
+        "WIDTH_MANUAL_VERTICAL_TOLERANCE_DEG",
+        data,
+        ("manual_vertical_alignment_tolerance_deg", "manual_vertical_tolerance_deg"),
+        MANUAL_VERTICAL_ALIGNMENT_TOLERANCE_DEG,
+        0.1,
+        45.0,
+    )
+
+
+def save_alignment_settings() -> None:
+    payload = read_settings_json()
+    payload["center_alignment_tolerance_ratio"] = CENTER_ALIGNMENT_TOLERANCE_RATIO
+    payload["center_alignment_tolerance_px"] = CENTER_ALIGNMENT_TOLERANCE_PX or 0
+    payload["angle_alignment_tolerance_deg"] = ANGLE_ALIGNMENT_TOLERANCE_DEG
+    payload["manual_vertical_alignment_tolerance_deg"] = MANUAL_VERTICAL_ALIGNMENT_TOLERANCE_DEG
+
+    try:
+        with open(edge_detect.get_settings_path(), "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2)
+    except OSError:
+        pass
+
+
+def configured_center_tolerance_px(width: int) -> float:
+    if CENTER_ALIGNMENT_TOLERANCE_PX is not None:
+        return CENTER_ALIGNMENT_TOLERANCE_PX
+    return max(12.0, width * CENTER_ALIGNMENT_TOLERANCE_RATIO)
+
+
+def get_configured_alignment_status(img: np.ndarray, result: dict[str, Any]) -> dict[str, Any]:
+    height, width = img.shape[:2]
+    center_x = width // 2
+    center_y = height // 2
+    tolerance_px = configured_center_tolerance_px(width)
+
+    tape_center_offset_px = None
+    angle_error_deg = None
+    aligned = False
+
+    if result is not None and result.get("ok") and result.get("midline") is not None:
+        (mx1, my1), (mx2, my2) = result["midline"]
+        if my2 != my1:
+            ratio = (center_y - my1) / float(my2 - my1)
+            mid_x_at_center = mx1 + ratio * (mx2 - mx1)
+            tape_center_offset_px = float(mid_x_at_center - center_x)
+        else:
+            tape_center_offset_px = float(((mx1 + mx2) * 0.5) - center_x)
+
+        angle_deg = result.get("angle_deg")
+        if angle_deg is not None:
+            angle_error_deg = abs(float(angle_deg) - 90.0)
+
+        aligned = (
+            tape_center_offset_px is not None
+            and angle_error_deg is not None
+            and abs(tape_center_offset_px) <= tolerance_px
+            and angle_error_deg <= ANGLE_ALIGNMENT_TOLERANCE_DEG
+        )
+
+    return {
+        "aligned": aligned,
+        "offset_px": tape_center_offset_px,
+        "angle_error_deg": angle_error_deg,
+        "center_tolerance_px": tolerance_px,
+        "angle_tolerance_deg": ANGLE_ALIGNMENT_TOLERANCE_DEG,
+    }
 
 
 @dataclass
@@ -284,11 +437,11 @@ class WidthCloudApp:
             width_value = float(result["width_px"])
             unit = "px"
 
-        self.latest_width = width_value
         self.latest_unit = unit
 
         aligned = bool(alignment_status.get("aligned")) if REQUIRE_CENTER_ALIGNMENT else True
         can_capture = bool(result.get("ok")) and width_value is not None and aligned
+        self.latest_width = width_value if can_capture else None
         return width_value, unit, can_capture
 
     def update_measurement_capture(self, result: dict[str, Any], alignment_status: dict[str, Any]) -> str:
@@ -619,7 +772,7 @@ def draw_detection_overlay(display: np.ndarray, result: dict[str, Any], params: 
         cv2.circle(display, result["segment1"], max(4, int(round(6 * ui_scale))), (255, 0, 255), -1)
         cv2.circle(display, result["segment2"], max(4, int(round(6 * ui_scale))), (255, 0, 255), -1)
 
-    alignment_status = edge_detect.get_center_alignment_status(display, result)
+    alignment_status = get_configured_alignment_status(display, result)
     edge_detect.draw_center_alignment_indicator(display, alignment_status)
     return display
 
@@ -708,7 +861,8 @@ def draw_program_live_hud(display: np.ndarray, status_text: str) -> np.ndarray:
         text_size, _ = cv2.getTextSize(value_text, cv2.FONT_HERSHEY_SIMPLEX, 1.8, 5)
         draw_text(display, value_text, ((width - text_size[0]) // 2, height // 2 + 34), 1.8, value_color, 5)
     else:
-        draw_text(display, "No width detected", (width // 2 - 180, height // 2 + 20), 0.9, COLOR_DANGER, 3)
+        placeholder = "Align tape first" if "Align" in status_text or "angle" in status_text else "No width detected"
+        draw_text(display, placeholder, (width // 2 - 180, height // 2 + 20), 0.9, COLOR_DANGER, 3)
 
     draw_text(display, app.tolerance_footer_text(), (18, height - 46), 0.52, COLOR_WARNING, 2)
     if app.latest_width is not None and app.latest_unit != "mm" and app.tolerance_limits() is not None:
@@ -735,7 +889,12 @@ def draw_manual_hud(display: np.ndarray, status_text: str) -> np.ndarray:
         text_size, _ = cv2.getTextSize(value_text, cv2.FONT_HERSHEY_SIMPLEX, 1.8, 5)
         draw_text(display, value_text, ((width - text_size[0]) // 2, height // 2 + 34), 1.8, COLOR_SUCCESS, 5)
     else:
-        draw_text(display, "No width detected", (width // 2 - 180, height // 2 + 20), 0.9, COLOR_DANGER, 3)
+        placeholder = (
+            "Align tape first"
+            if "Align" in status_text or "Straighten" in status_text or "Checking" in status_text
+            else "No width detected"
+        )
+        draw_text(display, placeholder, (width // 2 - 180, height // 2 + 20), 0.9, COLOR_DANGER, 3)
 
     draw_text(display, status_text[:54], (18, height - 30), 0.62, COLOR_TEXT, 2)
     exit_rect = (width - 128, 18, width - 14, 66)
@@ -800,6 +959,7 @@ def init_camera() -> Any:
 def main() -> int:
     edge_detect.setup_external_display()
     edge_detect.load_params_from_file()
+    load_alignment_settings()
     app.load_programs()
 
     screen_w, screen_h = edge_detect.detect_screen_size()
@@ -845,7 +1005,7 @@ def main() -> int:
                 params = edge_detect.get_params()
                 result = edge_detect.detect_parallel_edges_and_width(frame, params)
                 display = draw_detection_overlay(frame.copy(), result, params)
-                alignment_status = edge_detect.get_center_alignment_status(display, result)
+                alignment_status = get_configured_alignment_status(display, result)
                 status_text = app.update_manual_display(result, alignment_status)
                 view = fit_cover_to_canvas(display, screen_w, screen_h)
                 view = draw_manual_hud(view, status_text)
@@ -854,7 +1014,7 @@ def main() -> int:
                 params = edge_detect.get_params()
                 result = edge_detect.detect_parallel_edges_and_width(frame, params)
                 display = draw_detection_overlay(frame.copy(), result, params)
-                alignment_status = edge_detect.get_center_alignment_status(display, result)
+                alignment_status = get_configured_alignment_status(display, result)
                 status_text = app.update_program_live_display(result, alignment_status)
                 view = fit_cover_to_canvas(display, screen_w, screen_h)
                 view = draw_program_live_hud(view, status_text)
@@ -863,7 +1023,7 @@ def main() -> int:
                 params = edge_detect.get_params()
                 result = edge_detect.detect_parallel_edges_and_width(frame, params)
                 display = draw_detection_overlay(frame.copy(), result, params)
-                alignment_status = edge_detect.get_center_alignment_status(display, result)
+                alignment_status = get_configured_alignment_status(display, result)
                 status_text = app.update_measurement_capture(result, alignment_status)
                 view = fit_cover_to_canvas(display, screen_w, screen_h)
                 view = draw_measurement_hud(view, status_text)
@@ -891,6 +1051,7 @@ def main() -> int:
         edge_detect.close_calibration_input_window()
         edge_detect.close_params_window()
         edge_detect.save_params_to_file()
+        save_alignment_settings()
         if edge_detect.params_root is not None:
             try:
                 edge_detect.params_root.destroy()

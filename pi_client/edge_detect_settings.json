@@ -12,6 +12,10 @@
   "roi_bottom": 56,
   "min_sep_px": 29,
   "show_edges": 1,
+  "center_alignment_tolerance_ratio": 0.03,
+  "center_alignment_tolerance_px": 0,
+  "angle_alignment_tolerance_deg": 2,
+  "manual_vertical_alignment_tolerance_deg": 1,
   "use_mm": true,
   "mm_per_pixel": 0.0225
 }
