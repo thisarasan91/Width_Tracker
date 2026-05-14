@@ -1010,7 +1010,17 @@ def load_splash_image(width: int, height: int) -> np.ndarray:
     if SPLASH_IMAGE_PATH.exists():
         splash = cv2.imread(str(SPLASH_IMAGE_PATH))
         if splash is not None:
-            return fit_cover_to_canvas(splash, int(width*.5), int(height*.5))
+            # resize manually
+            new_w = int(width * 0.5)
+            new_h = int(height * 0.5)
+
+            splash = cv2.resize(splash, (new_w, new_h))
+
+            # center image
+            x = (width - new_w) // 2
+            y = (height - new_h) // 2
+
+            img[y:y+new_h, x:x+new_w] = splash
 
     img = blank_screen(width, height)
     draw_text(img, "TB Meter", (width // 2 - 130, height // 2 - 20), 1.4, COLOR_TEXT, 4)
