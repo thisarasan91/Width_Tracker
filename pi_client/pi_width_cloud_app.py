@@ -1361,7 +1361,7 @@ def main() -> int:
     cv2.setWindowProperty(WINDOW_CLOUD, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
     cv2.setMouseCallback(WINDOW_CLOUD, mouse_callback)
 
-    show_splash(screen_w, screen_h, "Loading camera settings...", 0.15)
+    show_splash(256, 256, "Loading camera settings...", 0.15)
     edge_detect.load_params_from_file()
     load_alignment_settings()
 
