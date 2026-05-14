@@ -1018,7 +1018,7 @@ def load_splash_image(width: int, height: int) -> np.ndarray:
 
 
 def render_splash_screen(width: int, height: int, status: str, progress: float) -> np.ndarray:
-    img = load_splash_image(width/2, height/2)
+    img = load_splash_image(256,256)
     progress = clamp_float(progress, 0.0, 1.0)
     overlay_h = 118
     y1 = height - overlay_h
