@@ -35,6 +35,7 @@ LOCAL_QUEUE_PATH = Path(os.getenv("WIDTH_LOCAL_QUEUE_PATH", str(APP_DIR / "local
 MEASUREMENT_LOG_PATH = Path(os.getenv("WIDTH_MEASUREMENT_LOG_PATH", str(APP_DIR / "measurement_log.csv")))
 PROGRAM_CACHE_PATH = Path(os.getenv("WIDTH_PROGRAM_CACHE_PATH", str(APP_DIR / "program_cache.json")))
 SPLASH_IMAGE_PATH = Path(os.getenv("WIDTH_SPLASH_IMAGE_PATH", str(APP_DIR / "splash_image.png")))
+SPLASH_IMAGE_SCALE = float(os.getenv("WIDTH_SPLASH_IMAGE_SCALE", "0.35"))
 LOCAL_SYNC_INTERVAL_SECONDS = float(os.getenv("WIDTH_LOCAL_SYNC_INTERVAL_SECONDS", "20"))
 INACTIVITY_SHUTDOWN_SECONDS = float(os.getenv("WIDTH_INACTIVITY_SHUTDOWN_SECONDS", "180"))
 SHUTDOWN_WARNING_SECONDS = float(os.getenv("WIDTH_SHUTDOWN_WARNING_SECONDS", "30"))
@@ -1007,22 +1008,25 @@ def blank_screen(width: int, height: int) -> np.ndarray:
 
 
 def load_splash_image(width: int, height: int) -> np.ndarray:
+    img = blank_screen(width, height)
+
     if SPLASH_IMAGE_PATH.exists():
         splash = cv2.imread(str(SPLASH_IMAGE_PATH))
         if splash is not None:
-            # resize manually
-            new_w = int(width * 0.5)
-            new_h = int(height * 0.5)
+            splash_h, splash_w = splash.shape[:2]
+            image_area_h = max(1, height - 130)
+            splash_scale = clamp_float(SPLASH_IMAGE_SCALE, 0.15, 0.8)
+            max_w = max(1, int(width * splash_scale))
+            max_h = max(1, int(image_area_h * splash_scale))
+            scale = min(max_w / splash_w, max_h / splash_h)
+            new_w = max(1, int(round(splash_w * scale)))
+            new_h = max(1, int(round(splash_h * scale)))
+            resized = cv2.resize(splash, (new_w, new_h), interpolation=cv2.INTER_AREA)
+            x = max(0, (width - new_w) // 2)
+            y = max(12, (image_area_h - new_h) // 2)
+            img[y:y + new_h, x:x + new_w] = resized
+            return img
 
-            splash = cv2.resize(splash, (new_w, new_h))
-
-            # center image
-            x = (width - new_w) // 2
-            y = (height - new_h) // 2
-
-            img[y:y+new_h, x:x+new_w] = splash
-
-    img = blank_screen(width, height)
     draw_text(img, "TB Meter", (width // 2 - 130, height // 2 - 20), 1.4, COLOR_TEXT, 4)
     return img
 
