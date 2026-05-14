@@ -1010,7 +1010,7 @@ def load_splash_image(width: int, height: int) -> np.ndarray:
     if SPLASH_IMAGE_PATH.exists():
         splash = cv2.imread(str(SPLASH_IMAGE_PATH))
         if splash is not None:
-            return fit_cover_to_canvas(splash, width, height)
+            return fit_cover_to_canvas(splash, int(width*.5), int(height*.5))
 
     img = blank_screen(width, height)
     draw_text(img, "TB Meter", (width // 2 - 130, height // 2 - 20), 1.4, COLOR_TEXT, 4)
@@ -1018,7 +1018,7 @@ def load_splash_image(width: int, height: int) -> np.ndarray:
 
 
 def render_splash_screen(width: int, height: int, status: str, progress: float) -> np.ndarray:
-    img = load_splash_image(256,256)
+    img = load_splash_image(width, height)
     progress = clamp_float(progress, 0.0, 1.0)
     overlay_h = 118
     y1 = height - overlay_h
