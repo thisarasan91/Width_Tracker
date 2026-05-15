@@ -22,7 +22,7 @@ export default async function MeasurementsPage({ searchParams }: MeasurementsPag
   let measurementsQuery = supabase
     .from("measurements")
     .select("*, device:devices(device_name, serial_number, loom_name), program:programs(program_name, batch_name)")
-    .order("stored_at", { ascending: false });
+    .order("sent_at", { ascending: false });
 
   if (filters.deviceId) {
     measurementsQuery = measurementsQuery.eq("device_id", filters.deviceId);
@@ -33,11 +33,11 @@ export default async function MeasurementsPage({ searchParams }: MeasurementsPag
   }
 
   if (filters.from) {
-    measurementsQuery = measurementsQuery.gte("stored_at", localInputToTimestamptz(filters.from));
+    measurementsQuery = measurementsQuery.gte("sent_at", localInputToTimestamptz(filters.from));
   }
 
   if (filters.to) {
-    measurementsQuery = measurementsQuery.lte("stored_at", localInputToTimestamptz(filters.to, true));
+    measurementsQuery = measurementsQuery.lte("sent_at", localInputToTimestamptz(filters.to, true));
   }
 
   const [measurementsResult, devicesResult, programsResult] = await Promise.all([
@@ -146,7 +146,7 @@ export default async function MeasurementsPage({ searchParams }: MeasurementsPag
             <tbody>
               {measurements.map((measurement) => (
                 <tr key={measurement.id}>
-                  <td>{formatCompactDateTime(measurement.stored_at)}</td>
+                  <td>{formatCompactDateTime(measurement.sent_at)}</td>
                   <td>{measurement.device?.device_name ?? "Unknown"}</td>
                   <td>{measurement.program?.program_name ?? "Unknown"}</td>
                   <td>{measurement.reading_label}</td>

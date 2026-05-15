@@ -15,7 +15,7 @@ export default async function DashboardPage() {
     supabase
       .from("measurements")
       .select("*, device:devices(device_name, serial_number), program:programs(program_name)")
-      .order("stored_at", { ascending: false })
+      .order("sent_at", { ascending: false })
       .limit(8)
   ]);
 
@@ -132,7 +132,7 @@ export default async function DashboardPage() {
             <tbody>
               {measurements.map((measurement) => (
                 <tr key={measurement.id}>
-                  <td>{formatCompactDateTime(measurement.stored_at)}</td>
+                  <td>{formatCompactDateTime(measurement.sent_at)}</td>
                   <td>{measurement.device?.device_name ?? "Unknown"}</td>
                   <td>{measurement.program?.program_name ?? "Unknown"}</td>
                   <td>{measurement.reading_label}</td>

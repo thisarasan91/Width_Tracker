@@ -35,8 +35,8 @@ function formatRange(filters: MeasurementFilters) {
 export async function getReportPayload(supabase: SupabaseClientLike, filters: MeasurementFilters): Promise<ReportPayload> {
   let query = supabase
     .from("measurements")
-    .select("stored_at, reading_label, reading_value, device:devices(device_name), program:programs(program_name)")
-    .order("stored_at", { ascending: true });
+    .select("sent_at, reading_label, reading_value, device:devices(device_name), program:programs(program_name)")
+    .order("sent_at", { ascending: true });
 
   if (filters.deviceId) {
     query = query.eq("device_id", filters.deviceId);
@@ -45,10 +45,10 @@ export async function getReportPayload(supabase: SupabaseClientLike, filters: Me
     query = query.eq("program_id", filters.programId);
   }
   if (filters.from) {
-    query = query.gte("stored_at", localInputToTimestamptz(filters.from));
+    query = query.gte("sent_at", localInputToTimestamptz(filters.from));
   }
   if (filters.to) {
-    query = query.lte("stored_at", localInputToTimestamptz(filters.to, true));
+    query = query.lte("sent_at", localInputToTimestamptz(filters.to, true));
   }
 
   const { data, error } = await query.limit(5000);
@@ -59,7 +59,7 @@ export async function getReportPayload(supabase: SupabaseClientLike, filters: Me
 
   const rows = (data ?? [])
     .map((row: any) => ({
-      timestamp: row.stored_at,
+      timestamp: row.sent_at,
       width: Number(row.reading_value),
       reading_label: row.reading_label ?? "",
       device_name: row.device?.device_name ?? "Unknown station",

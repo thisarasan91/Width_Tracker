@@ -62,6 +62,7 @@ COLOR_DARK_TEXT = (20, 30, 40)
 COLOR_SUCCESS = (0, 190, 95)
 COLOR_WARNING = (0, 190, 255)
 COLOR_DANGER = (40, 40, 220)
+UI_FONT = cv2.FONT_HERSHEY_COMPLEX
 CSV_HEADERS = [
     "measured_at",
     "logged_at",
@@ -979,7 +980,7 @@ def draw_text(img, text, origin, scale, color=(255,255,255), thickness=2):
         img,
         text,
         origin,
-        cv2.FONT_HERSHEY_SIMPLEX,
+        UI_FONT,
         scale,
         color,
         max(2, thickness),   # increase thickness
@@ -1253,7 +1254,7 @@ def draw_program_live_hud(display: np.ndarray, status_text: str) -> np.ndarray:
     if app.latest_width is not None:
         value_text = f"{app.latest_width:.3f} {app.latest_unit}"
         value_color = app.tolerance_color(app.latest_width, app.latest_unit)
-        text_size, _ = cv2.getTextSize(value_text, cv2.FONT_HERSHEY_SIMPLEX, 1.8, 5)
+        text_size, _ = cv2.getTextSize(value_text, UI_FONT, 1.8, 5)
         draw_text(display, value_text, ((width - text_size[0]) // 2, height // 2 + 34), 1.8, value_color, 5)
     else:
         placeholder = "Align tape first" if "Align" in status_text or "angle" in status_text else "No width detected"
@@ -1281,7 +1282,7 @@ def draw_manual_hud(display: np.ndarray, status_text: str) -> np.ndarray:
 
     if app.latest_width is not None:
         value_text = f"{app.latest_width:.3f} {app.latest_unit}"
-        text_size, _ = cv2.getTextSize(value_text, cv2.FONT_HERSHEY_SIMPLEX, 1.8, 5)
+        text_size, _ = cv2.getTextSize(value_text, UI_FONT, 1.8, 5)
         draw_text(display, value_text, ((width - text_size[0]) // 2, height // 2 + 34), 1.8, COLOR_SUCCESS, 5)
     else:
         placeholder = (

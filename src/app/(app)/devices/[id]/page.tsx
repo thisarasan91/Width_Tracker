@@ -32,7 +32,7 @@ export default async function DeviceDetailPage({ params }: DeviceDetailPageProps
       .from("measurements")
       .select("*, program:programs(program_name)")
       .eq("device_id", id)
-      .order("stored_at", { ascending: false })
+      .order("sent_at", { ascending: false })
       .limit(50)
   ]);
 
@@ -163,7 +163,7 @@ export default async function DeviceDetailPage({ params }: DeviceDetailPageProps
             <tbody>
               {measurements.map((measurement) => (
                 <tr key={measurement.id}>
-                  <td>{formatDateTime(measurement.stored_at)}</td>
+                  <td>{formatDateTime(measurement.sent_at)}</td>
                   <td>{measurement.program?.program_name ?? "Unknown"}</td>
                   <td>{measurement.measurement_session_id.slice(0, 8)}</td>
                   <td>{measurement.reading_label}</td>

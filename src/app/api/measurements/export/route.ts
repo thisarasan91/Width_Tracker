@@ -25,7 +25,7 @@ export async function GET(request: Request) {
     .select(
       "*, device:devices(device_name, serial_number, loom_name), program:programs(program_name, batch_name, elastic_development_reference)"
     )
-    .order("stored_at", { ascending: false });
+    .order("sent_at", { ascending: false });
 
   if (filters.deviceId) {
     query = query.eq("device_id", filters.deviceId);
@@ -36,11 +36,11 @@ export async function GET(request: Request) {
   }
 
   if (filters.from) {
-    query = query.gte("stored_at", localInputToTimestamptz(filters.from));
+    query = query.gte("sent_at", localInputToTimestamptz(filters.from));
   }
 
   if (filters.to) {
-    query = query.lte("stored_at", localInputToTimestamptz(filters.to, true));
+    query = query.lte("sent_at", localInputToTimestamptz(filters.to, true));
   }
 
   const { data, error } = await query.limit(10000);

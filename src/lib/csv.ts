@@ -48,7 +48,7 @@ export function measurementsToCsv(rows: MeasurementExportRow[]) {
   const headers = ["Date / Time", "Station", "Program", "Reading", "Value"];
 
   const body = rows.map((row) => [
-    formatCsvDateTime(row.stored_at),
+    formatCsvDateTime(row.sent_at),
     row.device?.device_name,
     row.program?.program_name,
     row.reading_label,
