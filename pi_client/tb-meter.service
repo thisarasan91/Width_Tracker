@@ -1,6 +1,6 @@
 [Unit]
 Description=TB Meter Raspberry Pi width measurement app
-After=graphical.target network-online.target
+After=graphical.target display-manager.service network-online.target
 Wants=network-online.target
 
 [Service]
@@ -9,9 +9,13 @@ User=pi
 WorkingDirectory=/home/pi/width_tracker/pi_client
 Environment=DISPLAY=:0
 Environment=XDG_SESSION_TYPE=x11
-ExecStart=/usr/bin/python3 /home/pi/width_tracker/pi_client/pi_width_cloud_app.py
+Environment=WIDTH_SPLASH_IMAGE_PATH=/home/pi/width_tracker/pi_client/splash_image.png
+Environment=WIDTH_FONT_THICKNESS_SCALE=0.55
+ExecStart=/home/pi/width_tracker/pi_client/tb-meter-start.sh
 Restart=always
 RestartSec=5
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=graphical.target

@@ -204,6 +204,16 @@ Run the cloud-connected camera screen:
 python pi_width_cloud_app.py
 ```
 
+To start TB Meter automatically when the Raspberry Pi boots, run the installer once on the Pi:
+
+```bash
+cd /home/pi/width_tracker/pi_client
+bash install_autostart.sh
+sudo reboot
+```
+
+The installer creates the `tb-meter.service` systemd service, starts `tb-meter-start.sh`, hides the Raspberry Pi boot splash where supported, and launches the TB Meter splash screen before the app loads. It also sets `WIDTH_FONT_THICKNESS_SCALE=0.55` so the Pi UI text is lighter. Increase or decrease that value in the service if the LCD needs a different weight.
+
 This opens the Pi main screen with assigned cloud programs as buttons. Tapping a program shows the expected measurement sequence from Supabase, then the camera screen captures each reading automatically after the detected width is stable and the `Stabilized, getting data, 3,2,1` countdown completes.
 
 The Pi first screen also has a `Manual` button. Manual mode is live-only: it continuously shows the current width without taking a measurement sequence or uploading values.

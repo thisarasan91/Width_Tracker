@@ -63,6 +63,7 @@ COLOR_SUCCESS = (0, 190, 95)
 COLOR_WARNING = (0, 190, 255)
 COLOR_DANGER = (40, 40, 220)
 UI_FONT = cv2.FONT_HERSHEY_TRIPLEX
+FONT_THICKNESS_SCALE = float(os.getenv("WIDTH_FONT_THICKNESS_SCALE", "0.55"))
 CSV_HEADERS = [
     "measured_at",
     "logged_at",
@@ -97,6 +98,10 @@ def parse_float(value: Any, default: float | None = None) -> float | None:
 
 def clamp_float(value: float, minimum: float, maximum: float) -> float:
     return max(minimum, min(maximum, value))
+
+
+def text_thickness(value: int | float) -> int:
+    return max(1, int(round(float(value) * FONT_THICKNESS_SCALE)))
 
 
 def format_measurement_value(value: Any) -> str:
@@ -990,8 +995,8 @@ def draw_text(img, text, origin, scale, color=(255,255,255), thickness=2):
         UI_FONT,
         scale,
         color,
-        max(2, thickness),   # increase thickness
-        cv2.LINE_AA           # keep anti-aliasing
+        text_thickness(thickness),
+        cv2.LINE_AA
     )
 
 def draw_button(
@@ -1261,7 +1266,7 @@ def draw_program_live_hud(display: np.ndarray, status_text: str) -> np.ndarray:
     if app.latest_width is not None:
         value_text = f"{app.latest_width:.2f} {app.latest_unit}"
         value_color = app.tolerance_color(app.latest_width, app.latest_unit)
-        text_size, _ = cv2.getTextSize(value_text, UI_FONT, 1.8, 5)
+        text_size, _ = cv2.getTextSize(value_text, UI_FONT, 1.8, text_thickness(5))
         draw_text(display, value_text, ((width - text_size[0]) // 2, height // 2 + 34), 1.8, value_color, 5)
     else:
         placeholder = "Align tape first" if "Align" in status_text or "angle" in status_text else "No width detected"
@@ -1289,7 +1294,7 @@ def draw_manual_hud(display: np.ndarray, status_text: str) -> np.ndarray:
 
     if app.latest_width is not None:
         value_text = f"{app.latest_width:.2f} {app.latest_unit}"
-        text_size, _ = cv2.getTextSize(value_text, UI_FONT, 1.8, 5)
+        text_size, _ = cv2.getTextSize(value_text, UI_FONT, 1.8, text_thickness(5))
         draw_text(display, value_text, ((width - text_size[0]) // 2, height // 2 + 34), 1.8, COLOR_SUCCESS, 5)
     else:
         placeholder = (
