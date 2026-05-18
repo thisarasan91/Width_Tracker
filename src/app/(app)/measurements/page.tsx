@@ -1,4 +1,5 @@
 import { Download } from "lucide-react";
+import { DateRangePicker } from "@/components/DateRangePicker";
 import { MeasurementsAutoRefresh } from "@/components/MeasurementsAutoRefresh";
 import { createClient } from "@/lib/supabase/server";
 import { formatCompactDateTime, formatNumber } from "@/lib/format";
@@ -106,14 +107,7 @@ export default async function MeasurementsPage({ searchParams }: MeasurementsPag
               ))}
             </select>
           </label>
-          <label>
-            From
-            <input name="from" type="datetime-local" defaultValue={filters.from} />
-          </label>
-          <label>
-            To
-            <input name="to" type="datetime-local" defaultValue={filters.to} />
-          </label>
+          <DateRangePicker from={filters.from} to={filters.to} idPrefix="measurements-date-range" />
           <div className="form-actions">
             <button className="button primary" type="submit">
               Apply filters

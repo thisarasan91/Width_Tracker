@@ -146,7 +146,7 @@ def collect_readings(program: dict[str, Any]) -> list[dict[str, Any]]:
         readings.append(
             {
                 "reading_label": label,
-                "reading_value": width,
+                "reading_value": round(width, 2),
                 "unit": "mm",
             }
         )

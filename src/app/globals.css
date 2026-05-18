@@ -421,6 +421,127 @@ textarea:focus {
   grid-column: 1 / -1;
 }
 
+.date-range-field {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.date-range-shell {
+  position: relative;
+}
+
+.date-range-trigger {
+  display: inline-flex;
+  width: 100%;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--text);
+  padding: 11px 12px;
+  text-align: left;
+}
+
+.date-range-trigger span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.date-range-trigger:hover,
+.date-range-trigger:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(23, 107, 135, 0.16);
+  outline: 0;
+}
+
+.date-range-popover {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 8px);
+  left: 0;
+  display: grid;
+  width: min(760px, calc(100vw - 360px));
+  min-width: min(100%, 560px);
+  grid-template-columns: 190px minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18);
+}
+
+.date-range-presets {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  border-right: 1px solid var(--border);
+  background: #fbfcfd;
+  padding: 12px;
+}
+
+.date-range-preset {
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  padding: 12px 14px;
+  text-align: left;
+}
+
+.date-range-preset:hover,
+.date-range-preset.selected {
+  background: #eaf1f6;
+  color: var(--primary);
+}
+
+.date-range-preset.selected {
+  box-shadow: inset 4px 0 0 var(--primary);
+  font-weight: 800;
+}
+
+.date-range-custom {
+  display: grid;
+  gap: 18px;
+  padding: 22px;
+}
+
+.date-range-inputs {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: end;
+  gap: 16px;
+}
+
+.date-range-arrow {
+  width: 20px;
+  height: 20px;
+  margin-bottom: 13px;
+  color: var(--muted);
+}
+
+.date-range-preview {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-muted);
+  color: var(--text);
+  padding: 12px;
+}
+
+.date-range-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 .form-message {
   margin: 14px 0 0;
   color: var(--danger);
@@ -578,6 +699,11 @@ code {
   .detail-list {
     grid-template-columns: 1fr;
   }
+
+  .date-range-popover {
+    width: min(100%, calc(100vw - 40px));
+    min-width: 0;
+  }
 }
 
 @media (max-width: 640px) {
@@ -592,5 +718,24 @@ code {
 
   .nav-list {
     grid-template-columns: 1fr;
+  }
+
+  .date-range-popover {
+    position: static;
+    margin-top: 8px;
+    grid-template-columns: 1fr;
+  }
+
+  .date-range-presets {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .date-range-inputs {
+    grid-template-columns: 1fr;
+  }
+
+  .date-range-arrow {
+    display: none;
   }
 }

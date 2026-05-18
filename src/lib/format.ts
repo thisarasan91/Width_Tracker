@@ -65,7 +65,8 @@ export function formatNumber(value: string | number) {
   }
 
   return numberValue.toLocaleString(undefined, {
-    maximumFractionDigits: 4
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
   });
 }
 

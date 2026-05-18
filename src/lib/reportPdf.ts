@@ -62,8 +62,8 @@ function buildPageContent(payload: ReportPayload) {
     content.push("0.02 0.45 0.26 rg");
     points.forEach((point) => content.push(pointMark(point.x, point.y, 2.2)));
     content.push("0 0 0 RG 0 0 0 rg");
-    content.push(pdfText(`${minWidth.toFixed(3)}`, 20, chart.y - 3, 8));
-    content.push(pdfText(`${maxWidth.toFixed(3)}`, 20, chart.y + chart.height - 3, 8));
+    content.push(pdfText(`${minWidth.toFixed(2)}`, 20, chart.y - 3, 8));
+    content.push(pdfText(`${maxWidth.toFixed(2)}`, 20, chart.y + chart.height - 3, 8));
     content.push(pdfText(formatCompactDateTime(rows[0].timestamp), chart.x, chart.y - 20, 8));
     content.push(pdfText(formatCompactDateTime(rows[rows.length - 1].timestamp), chart.x + chart.width - 120, chart.y - 20, 8));
   } else {
@@ -75,7 +75,7 @@ function buildPageContent(payload: ReportPayload) {
   rows.slice(0, 12).forEach((row, index) => {
     const y = 370 - index * 18;
     content.push(pdfText(formatCompactDateTime(row.timestamp), 55, y, 9));
-    content.push(pdfText(row.width.toFixed(4), 300, y, 9));
+    content.push(pdfText(row.width.toFixed(2), 300, y, 9));
   });
 
   if (rows.length > 12) {

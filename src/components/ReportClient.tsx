@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Download, FileText, RefreshCw } from "lucide-react";
+import { DateRangePicker } from "@/components/DateRangePicker";
 import { buildFilterQueryString, type MeasurementFilters } from "@/lib/measurementFilters";
 import { formatCompactDateTime, formatNumber } from "@/lib/format";
 import type { Device, Program } from "@/lib/types";
@@ -94,7 +95,7 @@ function WidthChart({ payload }: { payload: ReportPayload }) {
         {points.map((point, index) => (
           <circle key={`${point.row.timestamp}-${index}`} className="chart-point" cx={point.x} cy={point.y} r="4">
             <title>
-              {formatCompactDateTime(point.row.timestamp)} | {point.row.width.toFixed(4)}
+              {formatCompactDateTime(point.row.timestamp)} | {point.row.width.toFixed(2)}
             </title>
           </circle>
         ))}
@@ -205,14 +206,12 @@ export function ReportClient({ devices, programs, initialFilters }: ReportClient
               ))}
             </select>
           </label>
-          <label>
-            From
-            <input value={draftFilters.from} type="datetime-local" onChange={(event) => updateDraft("from", event.target.value)} />
-          </label>
-          <label>
-            To
-            <input value={draftFilters.to} type="datetime-local" onChange={(event) => updateDraft("to", event.target.value)} />
-          </label>
+          <DateRangePicker
+            from={draftFilters.from}
+            to={draftFilters.to}
+            idPrefix="reports-date-range"
+            onChange={(range) => setDraftFilters((current) => ({ ...current, from: range.from, to: range.to }))}
+          />
           <div className="form-actions">
             <button className="button primary" type="submit">
               Apply filters
@@ -272,7 +271,7 @@ export function ReportClient({ devices, programs, initialFilters }: ReportClient
                   <td>{row.device_name}</td>
                   <td>{row.program_name}</td>
                   <td>{row.reading_label}</td>
-                  <td>{row.width.toFixed(4)}</td>
+                  <td>{row.width.toFixed(2)}</td>
                 </tr>
               ))}
             </tbody>

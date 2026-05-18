@@ -23,7 +23,7 @@ export function reportPayloadToCsv(payload: ReportPayload) {
   ];
 
   payload.rows.forEach((row) => {
-    lines.push([formatCompactDateTime(row.timestamp), row.width.toFixed(4)]);
+    lines.push([formatCompactDateTime(row.timestamp), row.width.toFixed(2)]);
   });
 
   return lines.map((line) => line.map(escapeCsv).join(",")).join("\r\n");

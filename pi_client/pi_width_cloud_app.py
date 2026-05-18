@@ -99,6 +99,13 @@ def clamp_float(value: float, minimum: float, maximum: float) -> float:
     return max(minimum, min(maximum, value))
 
 
+def format_measurement_value(value: Any) -> str:
+    try:
+        return f"{float(value):.2f}"
+    except (TypeError, ValueError):
+        return str(value)
+
+
 def read_settings_json() -> dict[str, Any]:
     try:
         with open(edge_detect.get_settings_path(), "r", encoding="utf-8") as handle:
@@ -176,7 +183,7 @@ def append_measurement_csv(
                         "program_name": program.get("program_name"),
                         "batch_name": program.get("batch_name"),
                         "reading_label": reading.get("reading_label"),
-                        "reading_value": reading.get("reading_value"),
+                        "reading_value": format_measurement_value(reading.get("reading_value")),
                         "unit": reading.get("unit"),
                         "cloud_status": cloud_status,
                         "rows_stored": rows_stored or "",
@@ -671,7 +678,7 @@ class WidthCloudApp:
         self.readings.append(
             {
                 "reading_label": label,
-                "reading_value": round(float(value), 4),
+                "reading_value": round(float(value), 2),
                 "unit": unit,
                 "measured_at": local_timestamp_iso(),
             }
@@ -826,7 +833,7 @@ class WidthCloudApp:
         if not stable:
             self.countdown_started_at = None
             self.capture_samples = []
-            return f"Getting stable width: {width_value:.3f} {unit}"
+            return f"Getting stable width: {width_value:.2f} {unit}"
 
         if self.countdown_started_at is None:
             self.countdown_started_at = now
@@ -843,7 +850,7 @@ class WidthCloudApp:
 
             averaged_width = sum(self.capture_samples[-AVERAGE_SAMPLE_COUNT:]) / AVERAGE_SAMPLE_COUNT
             self.capture_current_reading(averaged_width, unit)
-            return f"Captured avg {averaged_width:.3f} {unit}"
+            return f"Captured avg {averaged_width:.2f} {unit}"
 
         remaining = max(1, math.ceil(COUNTDOWN_SECONDS - elapsed))
         return f"Stabilized, getting data, {remaining}"
@@ -893,7 +900,7 @@ class WidthCloudApp:
             return "Tolerance: not set"
 
         lower, nominal, upper = limits
-        return f"LSL {lower:.3f} | NOM {nominal:.3f} | USL {upper:.3f}"
+        return f"LSL {lower:.2f} | NOM {nominal:.2f} | USL {upper:.2f}"
 
     def _line_angle_from_vertical_degrees(self, line: tuple[tuple[int, int], tuple[int, int]] | None) -> float | None:
         if line is None:
@@ -947,7 +954,7 @@ class WidthCloudApp:
             self.latest_width = None
             return manual_message
 
-        return f"Width live: {width_value:.3f} {unit}"
+        return f"Width live: {width_value:.2f} {unit}"
 
     def update_program_live_display(self, result: dict[str, Any], alignment_status: dict[str, Any]) -> str:
         width_value, unit, _ = self.apply_detection(result, alignment_status)
@@ -960,10 +967,10 @@ class WidthCloudApp:
 
         status = self.tolerance_status(width_value, unit)
         if status == "in":
-            return f"Within tolerance: {width_value:.3f} {unit}"
+            return f"Within tolerance: {width_value:.2f} {unit}"
         if status == "out":
-            return f"Out of tolerance: {width_value:.3f} {unit}"
-        return f"Live width: {width_value:.3f} {unit}"
+            return f"Out of tolerance: {width_value:.2f} {unit}"
+        return f"Live width: {width_value:.2f} {unit}"
 
 
 app = WidthCloudApp()
@@ -1198,7 +1205,7 @@ def draw_measurement_hud(display: np.ndarray, status_text: str) -> np.ndarray:
     if app.latest_width is not None:
         draw_text(
             display,
-            f"Live width: {app.latest_width:.3f} {app.latest_unit}",
+            f"Live width: {app.latest_width:.2f} {app.latest_unit}",
             (width - 335, 108),
             0.58,
             app.tolerance_color(app.latest_width, app.latest_unit),
@@ -1225,7 +1232,7 @@ def draw_measurement_hud(display: np.ndarray, status_text: str) -> np.ndarray:
         reading_unit = str(reading.get("unit", app.latest_unit))
         draw_text(
             display,
-            f"{reading['reading_label'][:14]}: {reading['reading_value']} {reading['unit']}"[:32],
+            f"{reading['reading_label'][:14]}: {format_measurement_value(reading['reading_value'])} {reading['unit']}"[:32],
             (x, y),
             0.46,
             app.tolerance_color(reading_value, reading_unit),
@@ -1252,7 +1259,7 @@ def draw_program_live_hud(display: np.ndarray, status_text: str) -> np.ndarray:
     draw_text(display, status_text[:48], (18, 108), 0.52, app.tolerance_color(app.latest_width, app.latest_unit), 2)
 
     if app.latest_width is not None:
-        value_text = f"{app.latest_width:.3f} {app.latest_unit}"
+        value_text = f"{app.latest_width:.2f} {app.latest_unit}"
         value_color = app.tolerance_color(app.latest_width, app.latest_unit)
         text_size, _ = cv2.getTextSize(value_text, UI_FONT, 1.8, 5)
         draw_text(display, value_text, ((width - text_size[0]) // 2, height // 2 + 34), 1.8, value_color, 5)
@@ -1281,7 +1288,7 @@ def draw_manual_hud(display: np.ndarray, status_text: str) -> np.ndarray:
     draw_text(display, "Live width only. No cloud upload.", (18, 76), 0.58, COLOR_WARNING, 2)
 
     if app.latest_width is not None:
-        value_text = f"{app.latest_width:.3f} {app.latest_unit}"
+        value_text = f"{app.latest_width:.2f} {app.latest_unit}"
         text_size, _ = cv2.getTextSize(value_text, UI_FONT, 1.8, 5)
         draw_text(display, value_text, ((width - text_size[0]) // 2, height // 2 + 34), 1.8, COLOR_SUCCESS, 5)
     else:
@@ -1413,7 +1420,10 @@ def main() -> int:
             elif app.state == "manual_complete":
                 if app.readings:
                     reading = app.readings[-1]
-                    detail = f"{reading['reading_label']}: {reading['reading_value']} {reading['unit']} | Not uploaded"
+                    detail = (
+                        f"{reading['reading_label']}: "
+                        f"{format_measurement_value(reading['reading_value'])} {reading['unit']} | Not uploaded"
+                    )
                 else:
                     detail = "No values uploaded"
                 view = render_status_screen(screen_w, screen_h, "Manual measurement complete", detail)

@@ -32,6 +32,10 @@ function formatRange(filters: MeasurementFilters) {
   return "All dates";
 }
 
+function roundMeasurementValue(value: number) {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
 export async function getReportPayload(supabase: SupabaseClientLike, filters: MeasurementFilters): Promise<ReportPayload> {
   let query = supabase
     .from("measurements")
@@ -60,7 +64,7 @@ export async function getReportPayload(supabase: SupabaseClientLike, filters: Me
   const rows = (data ?? [])
     .map((row: any) => ({
       timestamp: row.sent_at,
-      width: Number(row.reading_value),
+      width: roundMeasurementValue(Number(row.reading_value)),
       reading_label: row.reading_label ?? "",
       device_name: row.device?.device_name ?? "Unknown station",
       program_name: row.program?.program_name ?? "Unknown program"

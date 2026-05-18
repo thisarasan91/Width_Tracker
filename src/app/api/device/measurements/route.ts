@@ -13,6 +13,14 @@ type IncomingReading = {
   unit?: unknown;
 };
 
+function roundMeasurementValue(value: number) {
+  if (!Number.isFinite(value)) {
+    return value;
+  }
+
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
 function normalizeReading(reading: IncomingReading, fallbackUnit: string) {
   const label = String(reading.reading_label ?? reading.label ?? "").trim();
   const numericValue = Number(reading.reading_value ?? reading.value);
@@ -20,7 +28,7 @@ function normalizeReading(reading: IncomingReading, fallbackUnit: string) {
 
   return {
     reading_label: label,
-    reading_value: numericValue,
+    reading_value: roundMeasurementValue(numericValue),
     unit
   };
 }
