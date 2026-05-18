@@ -357,6 +357,115 @@ export async function updateProgramAction(
   }
 }
 
+export async function deactivateProgramAction(
+  _previousState: ActionState = INITIAL_STATE,
+  formData: FormData
+): Promise<ActionState> {
+  try {
+    await requireUser();
+    const id = asText(formData, "program_id");
+
+    if (!id) {
+      return {
+        ok: false,
+        message: "Program id is required."
+      };
+    }
+
+    const supabase = await createClient();
+    const { error: programError } = await supabase
+      .from("programs")
+      .update({ is_active: false })
+      .eq("id", id);
+
+    if (programError) {
+      throw new Error(programError.message);
+    }
+
+    const { error: assignmentError } = await supabase
+      .from("device_program_assignments")
+      .update({ is_active: false })
+      .eq("program_id", id)
+      .eq("is_active", true);
+
+    if (assignmentError) {
+      throw new Error(assignmentError.message);
+    }
+
+    revalidatePath("/dashboard");
+    revalidatePath("/devices");
+    revalidatePath("/programs");
+    revalidatePath(`/programs/${id}`);
+
+    return {
+      ok: true,
+      message: "Program deactivated."
+    };
+  } catch (error) {
+    return errorState(error, "Could not deactivate program.");
+  }
+}
+
+export async function deleteProgramAction(
+  _previousState: ActionState = INITIAL_STATE,
+  formData: FormData
+): Promise<ActionState> {
+  let redirectTo = "";
+
+  try {
+    await requireUser();
+    const id = asText(formData, "program_id");
+    redirectTo = asText(formData, "redirect_to");
+
+    if (!id) {
+      return {
+        ok: false,
+        message: "Program id is required."
+      };
+    }
+
+    const supabase = await createClient();
+    const { count, error: countError } = await supabase
+      .from("measurements")
+      .select("id", { count: "exact", head: true })
+      .eq("program_id", id);
+
+    if (countError) {
+      throw new Error(countError.message);
+    }
+
+    if ((count ?? 0) > 0) {
+      return {
+        ok: false,
+        message: "This program has stored measurements. Deactivate it instead to preserve history."
+      };
+    }
+
+    const { error } = await supabase.from("programs").delete().eq("id", id);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    revalidatePath("/dashboard");
+    revalidatePath("/devices");
+    revalidatePath("/programs");
+    revalidatePath("/reports");
+    revalidatePath(`/programs/${id}`);
+  } catch (error) {
+    return errorState(error, "Could not delete program.");
+  }
+
+  if (redirectTo) {
+    redirect(redirectTo);
+  }
+
+  return {
+    ok: true,
+    message: "Program deleted."
+  };
+}
+
 export async function assignProgramAction(
   _previousState: ActionState = INITIAL_STATE,
   formData: FormData

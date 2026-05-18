@@ -552,6 +552,33 @@ textarea:focus {
   color: var(--success);
 }
 
+.compact-message {
+  margin-top: 8px;
+  font-size: 0.82rem;
+}
+
+.header-actions,
+.table-actions,
+.program-actions,
+.program-actions-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.header-actions,
+.table-actions {
+  flex-wrap: wrap;
+}
+
+.program-actions {
+  flex-direction: column;
+}
+
+.program-actions-row {
+  flex-wrap: wrap;
+}
+
 .token-box {
   display: grid;
   gap: 10px;

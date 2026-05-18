@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { ProgramActions } from "@/components/ProgramActions";
 import { ProgramForm } from "@/components/ProgramForm";
 import { StatusBadge } from "@/components/StatusBadge";
 import { createClient } from "@/lib/supabase/server";
@@ -46,7 +47,10 @@ export default async function ProgramDetailPage({ params }: ProgramDetailPagePro
           <p className="eyebrow">Program</p>
           <h1>{program.program_name}</h1>
         </div>
-        <StatusBadge status={program.is_active ? "active" : "inactive"} />
+        <div className="header-actions">
+          <StatusBadge status={program.is_active ? "active" : "inactive"} />
+          <ProgramActions programId={program.id} isActive={program.is_active} redirectAfterDelete />
+        </div>
       </header>
 
       <section className="panel">

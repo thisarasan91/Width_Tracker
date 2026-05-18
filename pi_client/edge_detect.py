@@ -266,7 +266,7 @@ def draw_button(img, rect, text, active=False):
     cv2.rectangle(img, (x1, y1), (x2, y2), (0, 0, 0), max(2, int(round(2 * scale))))
     text_size, _ = cv2.getTextSize(
         text,
-        cv2.FONT_HERSHEY_SIMPLEX,
+        cv2.FONT_HERSHEY_TRIPLEX,
         0.9 * scale,
         max(2, int(round(2 * scale))),
     )
@@ -276,7 +276,7 @@ def draw_button(img, rect, text, active=False):
         img,
         text,
         (text_x, text_y),
-        cv2.FONT_HERSHEY_SIMPLEX,
+        cv2.FONT_HERSHEY_TRIPLEX,
         0.9 * scale,
         (0, 0, 0),
         max(2, int(round(2 * scale))),
@@ -349,7 +349,7 @@ def draw_center_alignment_indicator(img, alignment_status):
             img,
             status,
             (int(round(20 * scale)), int(round(200 * scale))),
-            cv2.FONT_HERSHEY_SIMPLEX,
+            cv2.FONT_HERSHEY_TRIPLEX,
             0.55 * scale,
             color,
             max(2, int(round(2 * scale))),
@@ -588,7 +588,7 @@ def build_edges_preview(frame_shape, result):
 
     cv2.rectangle(preview, (0, y1), (preview.shape[1] - 1, y2), (80, 80, 80), 2)
     cv2.putText(preview, "Edge View", (20, 40),
-                cv2.FONT_HERSHEY_SIMPLEX, 1.0 * ui_scale, (255, 255, 255),
+                cv2.FONT_HERSHEY_TRIPLEX, 1.0 * ui_scale, (255, 255, 255),
                 max(2, int(round(2 * ui_scale))), cv2.LINE_AA)
     return preview
 
@@ -608,7 +608,7 @@ def build_main_view(display, result):
     bottom_view = cv2.resize(roi_edges, (display.shape[1], half_h), interpolation=cv2.INTER_AREA)
     ui_scale = get_ui_scale(top_view)
     cv2.putText(top_view, "ROI View", (20, 40),
-                cv2.FONT_HERSHEY_SIMPLEX, 1.0 * ui_scale, (255, 255, 255),
+                cv2.FONT_HERSHEY_TRIPLEX, 1.0 * ui_scale, (255, 255, 255),
                 max(2, int(round(2 * ui_scale))), cv2.LINE_AA)
     return np.vstack((top_view, bottom_view))
 
@@ -1063,22 +1063,22 @@ def run_standalone_edge_detector():
                 text2 = f"Angle: {result['angle_deg']:.2f} deg"
 
                 cv2.putText(display, text1, (int(round(20 * ui_scale)), display.shape[0] - int(round(50 * ui_scale))),
-                            cv2.FONT_HERSHEY_SIMPLEX, 1.0 * ui_scale, (0, 255, 255), overlay_thickness, cv2.LINE_AA)
+                            cv2.FONT_HERSHEY_TRIPLEX, 1.0 * ui_scale, (0, 255, 255), overlay_thickness, cv2.LINE_AA)
                 cv2.putText(display, text2, (int(round(20 * ui_scale)), display.shape[0] - int(round(15 * ui_scale))),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.8 * ui_scale, (0, 255, 255), overlay_thickness, cv2.LINE_AA)
+                            cv2.FONT_HERSHEY_TRIPLEX, 0.8 * ui_scale, (0, 255, 255), overlay_thickness, cv2.LINE_AA)
             else:
                 cv2.putText(display, f"Status: {result['msg']}", (int(round(20 * ui_scale)), display.shape[0] - int(round(20 * ui_scale))),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.8 * ui_scale, (0, 0, 255), overlay_thickness, cv2.LINE_AA)
+                            cv2.FONT_HERSHEY_TRIPLEX, 0.8 * ui_scale, (0, 0, 255), overlay_thickness, cv2.LINE_AA)
 
             mm_text = f"Scale: {MM_PER_PIXEL:.6f} mm/px" if USE_MM else "Scale: not calibrated"
             cv2.putText(display, mm_text, (int(round(20 * ui_scale)), int(round(95 * ui_scale))),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7 * ui_scale, (255, 255, 0), overlay_thickness, cv2.LINE_AA)
+                        cv2.FONT_HERSHEY_TRIPLEX, 0.7 * ui_scale, (255, 255, 0), overlay_thickness, cv2.LINE_AA)
             cv2.putText(display, calibration_status, (int(round(20 * ui_scale)), int(round(130 * ui_scale))),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6 * ui_scale, (255, 255, 0), overlay_thickness, cv2.LINE_AA)
+                        cv2.FONT_HERSHEY_TRIPLEX, 0.6 * ui_scale, (255, 255, 0), overlay_thickness, cv2.LINE_AA)
             if pending_calibration_width_mm is not None:
                 pending_text = f"Pending calibration width: {pending_calibration_width_mm:.3f} mm"
                 cv2.putText(display, pending_text, (int(round(20 * ui_scale)), int(round(165 * ui_scale))),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.55 * ui_scale, (255, 255, 0), overlay_thickness, cv2.LINE_AA)
+                            cv2.FONT_HERSHEY_TRIPLEX, 0.55 * ui_scale, (255, 255, 0), overlay_thickness, cv2.LINE_AA)
 
             alignment_status = get_center_alignment_status(display, result)
             draw_center_alignment_indicator(display, alignment_status)
@@ -1089,7 +1089,7 @@ def run_standalone_edge_detector():
                 final_thickness = max(3, int(round(4 * ui_scale)))
                 text_size, _ = cv2.getTextSize(
                     final_text,
-                    cv2.FONT_HERSHEY_SIMPLEX,
+                    cv2.FONT_HERSHEY_TRIPLEX,
                     final_scale,
                     final_thickness,
                 )
@@ -1102,7 +1102,7 @@ def run_standalone_edge_detector():
                     display,
                     final_text,
                     (text_x, text_y),
-                    cv2.FONT_HERSHEY_SIMPLEX,
+                    cv2.FONT_HERSHEY_TRIPLEX,
                     final_scale,
                     (0, 255, 0),
                     final_thickness,
@@ -1114,7 +1114,7 @@ def run_standalone_edge_detector():
             draw_button(display, (BTN_X1, BTN_Y1, BTN_X2, BTN_Y2), "Params", params_window_open)
             draw_button(display, "cal", cal_button_text, cal_button_ready)
             cv2.putText(display, "Q=Quit  P=Toggle Params  C=Calibrate", (int(round(220 * ui_scale)), int(round(45 * ui_scale))),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.8 * ui_scale, (255, 255, 255), overlay_thickness, cv2.LINE_AA)
+                        cv2.FONT_HERSHEY_TRIPLEX, 0.8 * ui_scale, (255, 255, 255), overlay_thickness, cv2.LINE_AA)
             display_view = build_main_view(display, result)
             latest_display_shape = display.shape
 

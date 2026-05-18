@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+import { ProgramActions } from "@/components/ProgramActions";
 import { ProgramForm } from "@/components/ProgramForm";
 import { StatusBadge } from "@/components/StatusBadge";
 import { createClient } from "@/lib/supabase/server";
@@ -40,7 +41,7 @@ export default async function ProgramsPage() {
                 <th>Nominal</th>
                 <th>Status</th>
                 <th>Created</th>
-                <th>Open</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -56,10 +57,13 @@ export default async function ProgramsPage() {
                   </td>
                   <td>{formatDateTime(program.created_at)}</td>
                   <td>
-                    <Link className="button secondary" href={`/programs/${program.id}`}>
-                      Edit
-                      <ArrowRight aria-hidden="true" className="icon" />
-                    </Link>
+                    <div className="table-actions">
+                      <Link className="button secondary" href={`/programs/${program.id}`}>
+                        Edit
+                        <ArrowRight aria-hidden="true" className="icon" />
+                      </Link>
+                      <ProgramActions programId={program.id} isActive={program.is_active} />
+                    </div>
                   </td>
                 </tr>
               ))}
