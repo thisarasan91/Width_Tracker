@@ -220,6 +220,8 @@ This opens the Pi main screen with assigned cloud programs as buttons. Tapping a
 
 At startup, `pi_width_cloud_app.py` checks `/api/device/settings` for saved settings for that Pi device. If settings exist, it merges the cloud edge/app parameters into `pi_client/edge_detect_settings.json` before loading the detector, while preserving calibration values such as `use_mm` and `mm_per_pixel`.
 
+The edge ROI supports all four crop directions: `roi_top`, `roi_bottom`, `roi_left`, and `roi_right`, all as percentages from `0` to `100`.
+
 The Pi first screen also has a `Manual` button. Manual mode is live-only: it continuously shows the current width without taking a measurement sequence or uploading values.
 
 During a program measurement, the `Exit` button cancels the current cycle and clears captured readings without sending values to Supabase.

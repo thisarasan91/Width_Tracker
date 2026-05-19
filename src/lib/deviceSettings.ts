@@ -15,6 +15,8 @@ export const defaultEdgeSettings: Record<string, number> = {
   angle_tol: 12,
   roi_top: 15,
   roi_bottom: 85,
+  roi_left: 0,
+  roi_right: 100,
   min_sep_px: 30,
   show_edges: 1
 };

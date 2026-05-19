@@ -63,6 +63,8 @@ DEFAULT_PARAMS = {
     "angle_tol": 12,
     "roi_top": 15,
     "roi_bottom": 85,
+    "roi_left": 0,
+    "roi_right": 100,
     "min_sep_px": 30,
     "show_edges": 1,
 }
@@ -79,6 +81,8 @@ PARAM_SPECS = [
     ("angle_tol", "Angle Tol", 1, 45),
     ("roi_top", "ROI Top %", 0, 100),
     ("roi_bottom", "ROI Bottom %", 0, 100),
+    ("roi_left", "ROI Left %", 0, 100),
+    ("roi_right", "ROI Right %", 0, 100),
     ("min_sep_px", "Min Sep px", 1, 500),
     ("show_edges", "Show Edges", 0, 1),
 ]
@@ -593,15 +597,15 @@ def perpendicular_segment_between_parallel_lines(slope_xy, intercept1, intercept
 def build_edges_preview(frame_shape, result):
     preview = np.zeros(frame_shape, dtype=np.uint8)
     edges = result["edges"]
-    _, y1, _, y2 = result["roi_box"]
+    x1, y1, x2, y2 = result["roi_box"]
     ui_scale = get_ui_scale(preview)
 
     edge_bgr = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
     edge_bgr[:, :, 1] = 0
     edge_bgr[:, :, 0] = 0
-    preview[y1:y2, :] = edge_bgr
+    preview[y1:y2, x1:x2] = edge_bgr
 
-    cv2.rectangle(preview, (0, y1), (preview.shape[1] - 1, y2), (80, 80, 80), 2)
+    cv2.rectangle(preview, (x1, y1), (x2 - 1, y2), (80, 80, 80), 2)
     cv2.putText(preview, "Edge View", (20, 40),
                 UI_FONT, 1.0 * ui_scale, (255, 255, 255),
                 font_thickness(2 * ui_scale), cv2.LINE_AA)
@@ -611,9 +615,9 @@ def build_main_view(display, result):
     if not params_window_open:
         return display
 
-    _, y1, _, y2 = result["roi_box"]
-    roi_display = display[y1:y2, :]
-    roi_edges = build_edges_preview(display.shape, result)[y1:y2, :]
+    x1, y1, x2, y2 = result["roi_box"]
+    roi_display = display[y1:y2, x1:x2]
+    roi_edges = build_edges_preview(display.shape, result)[y1:y2, x1:x2]
 
     if roi_display.size == 0 or roi_edges.size == 0:
         return display
@@ -791,6 +795,14 @@ def get_params():
         if "roi_bottom" in params_vars:
             params_vars["roi_bottom"].set(roi_bottom)
 
+    roi_left = params_values["roi_left"]
+    roi_right = params_values["roi_right"]
+    if roi_right <= roi_left + 5:
+        roi_right = min(100, roi_left + 5)
+        params_values["roi_right"] = roi_right
+        if "roi_right" in params_vars:
+            params_vars["roi_right"].set(roi_right)
+
     params_values["blur"] = blur
 
     return {
@@ -805,6 +817,8 @@ def get_params():
         "angle_tol": max(1, params_values["angle_tol"]),
         "roi_top": roi_top,
         "roi_bottom": roi_bottom,
+        "roi_left": roi_left,
+        "roi_right": roi_right,
         "min_sep_px": max(1, params_values["min_sep_px"]),
         "show_edges": params_values["show_edges"],
     }
@@ -829,11 +843,15 @@ def extract_roi(frame_bgr, params):
     h, w = frame_bgr.shape[:2]
     y1 = int(h * params["roi_top"] / 100.0)
     y2 = int(h * params["roi_bottom"] / 100.0)
+    x1 = int(w * params["roi_left"] / 100.0)
+    x2 = int(w * params["roi_right"] / 100.0)
     y1 = clamp(y1, 0, h - 1)
     y2 = clamp(y2, y1 + 1, h)
-    roi = frame_bgr[y1:y2, :].copy()
+    x1 = clamp(x1, 0, w - 1)
+    x2 = clamp(x2, x1 + 1, w)
+    roi = frame_bgr[y1:y2, x1:x2].copy()
     roi = apply_image_adjustments(roi, params)
-    return roi, y1, y2, w
+    return roi, x1, y1, x2, y2
 
 def build_vertical_profile(gray):
     sobel_x = cv2.Sobel(gray, cv2.CV_32F, 1, 0, ksize=3)
@@ -845,7 +863,8 @@ def build_vertical_profile(gray):
     return sobel_x, profile, edge_strength
 
 def detect_parallel_edges_and_width(frame_bgr, params):
-    roi, y1, y2, w = extract_roi(frame_bgr, params)
+    roi, x1, y1, x2, y2 = extract_roi(frame_bgr, params)
+    roi_w = x2 - x1
 
     gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
     gray = cv2.GaussianBlur(gray, (params["blur"], params["blur"]), 0)
@@ -853,13 +872,13 @@ def detect_parallel_edges_and_width(frame_bgr, params):
     left_response = np.clip(-sobel_x, 0, None)
     right_response = np.clip(sobel_x, 0, None)
 
-    profile_left = cv2.GaussianBlur(left_response.mean(axis=0).reshape(1, -1), (max(9, (w // 40) | 1), 1), 0).ravel()
-    profile_right = cv2.GaussianBlur(right_response.mean(axis=0).reshape(1, -1), (max(9, (w // 40) | 1), 1), 0).ravel()
+    profile_left = cv2.GaussianBlur(left_response.mean(axis=0).reshape(1, -1), (max(9, (roi_w // 40) | 1), 1), 0).ravel()
+    profile_right = cv2.GaussianBlur(right_response.mean(axis=0).reshape(1, -1), (max(9, (roi_w // 40) | 1), 1), 0).ravel()
 
     result = {
         "ok": False,
         "edges": edge_strength,
-        "roi_box": (0, y1, w, y2),
+        "roi_box": (x1, y1, x2, y2),
         "line1": None,
         "line2": None,
         "midline": None,
@@ -872,11 +891,11 @@ def detect_parallel_edges_and_width(frame_bgr, params):
     }
 
     min_sep = params["min_sep_px"]
-    center_x = w // 2
+    center_x = roi_w // 2
     left_end = max(min_sep, center_x - max(10, min_sep // 2))
-    right_start = min(w - min_sep, center_x + max(10, min_sep // 2))
+    right_start = min(roi_w - min_sep, center_x + max(10, min_sep // 2))
 
-    if left_end <= 1 or right_start >= w - 1:
+    if left_end <= 1 or right_start >= roi_w - 1:
         result["msg"] = "ROI too narrow for requested separation"
         return result
 
@@ -901,9 +920,9 @@ def detect_parallel_edges_and_width(frame_bgr, params):
 
     for row_idx in range(roi_h):
         left_col_start = max(0, left_x - search_margin)
-        left_col_end = min(w, left_x + search_margin + 1)
+        left_col_end = min(roi_w, left_x + search_margin + 1)
         right_col_start = max(0, right_x - search_margin)
-        right_col_end = min(w, right_x + search_margin + 1)
+        right_col_end = min(roi_w, right_x + search_margin + 1)
 
         left_slice = left_response[row_idx, left_col_start:left_col_end]
         right_slice = right_response[row_idx, right_col_start:right_col_end]
@@ -917,9 +936,9 @@ def detect_parallel_edges_and_width(frame_bgr, params):
         local_right_val = float(right_slice[local_right_idx])
 
         if local_left_val >= min_row_strength:
-            row_left_points.append((row_idx + y1, local_left_idx + left_col_start))
+            row_left_points.append((row_idx + y1, x1 + local_left_idx + left_col_start))
         if local_right_val >= min_row_strength:
-            row_right_points.append((row_idx + y1, local_right_idx + right_col_start))
+            row_right_points.append((row_idx + y1, x1 + local_right_idx + right_col_start))
 
     if len(row_left_points) < max(10, roi_h // 6) or len(row_right_points) < max(10, roi_h // 6):
         result["msg"] = "Not enough edge points"
@@ -1050,15 +1069,15 @@ def run_standalone_edge_detector():
             display = frame.copy()
             ui_scale = get_ui_scale(display)
             overlay_thickness = max(2, int(round(2 * ui_scale)))
-            _, ry1, _, ry2 = result["roi_box"]
-            display[ry1:ry2, :] = apply_image_adjustments(display[ry1:ry2, :], params)
-            cv2.rectangle(display, (0, ry1), (display.shape[1] - 1, ry2), (80, 80, 80), overlay_thickness)
+            rx1, ry1, rx2, ry2 = result["roi_box"]
+            display[ry1:ry2, rx1:rx2] = apply_image_adjustments(display[ry1:ry2, rx1:rx2], params)
+            cv2.rectangle(display, (rx1, ry1), (rx2 - 1, ry2), (80, 80, 80), overlay_thickness)
 
             if params["show_edges"]:
                 edges = result["edges"]
                 edge_bgr = np.zeros((edges.shape[0], edges.shape[1], 3), dtype=np.uint8)
                 edge_bgr[:, :, 2] = edges
-                display[ry1:ry2, :] = cv2.addWeighted(display[ry1:ry2, :], 1.0, edge_bgr, 0.6, 0)
+                display[ry1:ry2, rx1:rx2] = cv2.addWeighted(display[ry1:ry2, rx1:rx2], 1.0, edge_bgr, 0.6, 0)
 
             if result["ok"]:
                 cv2.line(display, result["line1"][0], result["line1"][1], (0, 255, 0), max(2, int(round(3 * ui_scale))))

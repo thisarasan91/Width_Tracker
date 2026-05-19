@@ -10,6 +10,8 @@
   "angle_tol": 12,
   "roi_top": 40,
   "roi_bottom": 56,
+  "roi_left": 0,
+  "roi_right": 100,
   "min_sep_px": 29,
   "show_edges": 1,
   "center_alignment_tolerance_ratio": 0.03,

@@ -1353,15 +1353,15 @@ def render_sequence_screen(width: int, height: int) -> np.ndarray:
 def draw_detection_overlay(display: np.ndarray, result: dict[str, Any], params: dict[str, Any]) -> np.ndarray:
     ui_scale = edge_detect.get_ui_scale(display)
     overlay_thickness = max(2, int(round(2 * ui_scale)))
-    _, ry1, _, ry2 = result["roi_box"]
-    display[ry1:ry2, :] = edge_detect.apply_image_adjustments(display[ry1:ry2, :], params)
-    cv2.rectangle(display, (0, ry1), (display.shape[1] - 1, ry2), (80, 80, 80), overlay_thickness)
+    rx1, ry1, rx2, ry2 = result["roi_box"]
+    display[ry1:ry2, rx1:rx2] = edge_detect.apply_image_adjustments(display[ry1:ry2, rx1:rx2], params)
+    cv2.rectangle(display, (rx1, ry1), (rx2 - 1, ry2), (80, 80, 80), overlay_thickness)
 
     if params["show_edges"]:
         edges = result["edges"]
         edge_bgr = np.zeros((edges.shape[0], edges.shape[1], 3), dtype=np.uint8)
         edge_bgr[:, :, 2] = edges
-        display[ry1:ry2, :] = cv2.addWeighted(display[ry1:ry2, :], 1.0, edge_bgr, 0.6, 0)
+        display[ry1:ry2, rx1:rx2] = cv2.addWeighted(display[ry1:ry2, rx1:rx2], 1.0, edge_bgr, 0.6, 0)
 
     if result["ok"]:
         cv2.line(display, result["line1"][0], result["line1"][1], (0, 255, 0), max(2, int(round(3 * ui_scale))))
