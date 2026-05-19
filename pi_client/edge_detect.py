@@ -161,11 +161,17 @@ def apply_main_window_layout():
         params_w = min(420, max(320, SCREEN_W // 3))
         main_w = max(320, SCREEN_W - params_w - WINDOW_GAP)
         main_h = min(SCREEN_H, 720)
-        cv2.resizeWindow(WINDOW_MAIN, main_w, main_h)
-        cv2.moveWindow(WINDOW_MAIN, params_w + WINDOW_GAP, 0)
+        try:
+            cv2.resizeWindow(WINDOW_MAIN, main_w, main_h)
+            cv2.moveWindow(WINDOW_MAIN, params_w + WINDOW_GAP, 0)
+        except cv2.error:
+            pass
     else:
-        cv2.resizeWindow(WINDOW_MAIN, SCREEN_W, SCREEN_H)
-        cv2.moveWindow(WINDOW_MAIN, 0, 0)
+        try:
+            cv2.resizeWindow(WINDOW_MAIN, SCREEN_W, SCREEN_H)
+            cv2.moveWindow(WINDOW_MAIN, 0, 0)
+        except cv2.error:
+            pass
 
 def get_main_view_size():
     if SCREEN_W is None or SCREEN_H is None:
@@ -178,8 +184,12 @@ def get_main_view_size():
     return SCREEN_W, SCREEN_H
 
 def get_params_window_geometry():
-    params_w = min(420, max(320, SCREEN_W // 3 if SCREEN_W else 420))
-    params_h = min(520, SCREEN_H if SCREEN_H else 520)
+    if SCREEN_W and SCREEN_H:
+        params_w = min(SCREEN_W, 800)
+        params_h = min(SCREEN_H, 480)
+    else:
+        params_w = 800
+        params_h = 480
     return params_w, params_h
 
 def get_settings_path():
@@ -605,11 +615,25 @@ def build_edges_preview(frame_shape, result):
     edge_bgr[:, :, 0] = 0
     preview[y1:y2, x1:x2] = edge_bgr
 
-    cv2.rectangle(preview, (x1, y1), (x2 - 1, y2), (80, 80, 80), 2)
+    cv2.rectangle(preview, (x1, y1), (x2 - 1, y2 - 1), (80, 80, 80), 2)
     cv2.putText(preview, "Edge View", (20, 40),
                 UI_FONT, 1.0 * ui_scale, (255, 255, 255),
                 font_thickness(2 * ui_scale), cv2.LINE_AA)
     return preview
+
+def draw_roi_overlay(display, result):
+    x1, y1, x2, y2 = result["roi_box"]
+    if x2 <= x1 or y2 <= y1:
+        return
+
+    shaded = display.copy()
+    shaded[:] = 0
+    shaded[y1:y2, x1:x2] = display[y1:y2, x1:x2]
+    cv2.addWeighted(shaded, 0.28, display, 0.72, 0, display)
+
+    ui_scale = get_ui_scale(display)
+    thickness = max(2, int(round(2 * ui_scale)))
+    cv2.rectangle(display, (x1, y1), (x2 - 1, y2 - 1), (0, 210, 255), thickness)
 
 def build_main_view(display, result):
     if not params_window_open:
@@ -667,16 +691,24 @@ def create_params_window():
     params_window = tk.Toplevel(params_root)
     params_window.title(WINDOW_PARAMS)
     params_window.geometry(f"{params_w}x{params_h}+0+0")
-    params_window.resizable(False, False)
+    params_window.resizable(True, True)
+    try:
+        params_window.attributes("-topmost", True)
+    except tk.TclError:
+        pass
     params_window.protocol("WM_DELETE_WINDOW", on_params_window_closed)
 
     container = tk.Frame(params_window, padx=8, pady=8)
     container.pack(fill="both", expand=True)
 
     params_vars = {}
-    for row_idx, (key, label, min_val, max_val) in enumerate(PARAM_SPECS):
-        tk.Label(container, text=label, anchor="w", width=14).grid(
-            row=row_idx, column=0, sticky="w", padx=(0, 8), pady=3
+    rows_per_column = int(math.ceil(len(PARAM_SPECS) / 2.0))
+    for index, (key, label, min_val, max_val) in enumerate(PARAM_SPECS):
+        row_idx = index % rows_per_column
+        column_offset = (index // rows_per_column) * 6
+
+        tk.Label(container, text=label, anchor="w", width=12).grid(
+            row=row_idx, column=column_offset, sticky="w", padx=(0, 6), pady=3
         )
 
         tk.Button(
@@ -684,7 +716,7 @@ def create_params_window():
             text="-",
             width=3,
             command=lambda current_key=key: adjust_param_value(current_key, -1),
-        ).grid(row=row_idx, column=1, padx=(0, 4), pady=3)
+        ).grid(row=row_idx, column=column_offset + 1, padx=(0, 3), pady=3)
 
         var = tk.StringVar(value=str(params_values[key]))
         params_vars[key] = var
@@ -697,30 +729,37 @@ def create_params_window():
             anchor="center",
             bg="white",
         )
-        value_label.grid(row=row_idx, column=2, padx=2, pady=3)
+        value_label.grid(row=row_idx, column=column_offset + 2, padx=2, pady=3)
 
         tk.Button(
             container,
             text="+",
             width=3,
             command=lambda current_key=key: adjust_param_value(current_key, 1),
-        ).grid(row=row_idx, column=3, padx=(4, 8), pady=3)
+        ).grid(row=row_idx, column=column_offset + 3, padx=(3, 6), pady=3)
 
         entry = tk.Entry(container, textvariable=var, width=7, justify="center")
-        entry.grid(row=row_idx, column=4, sticky="ew", pady=3)
+        entry.grid(row=row_idx, column=column_offset + 4, sticky="ew", pady=3)
 
         tk.Label(container, text=f"{min_val}-{max_val}", anchor="w", width=9).grid(
-            row=row_idx, column=5, sticky="w", pady=3
+            row=row_idx, column=column_offset + 5, sticky="w", padx=(4, 14), pady=3
         )
 
     container.columnconfigure(4, weight=1)
+    container.columnconfigure(10, weight=1)
 
     tk.Label(
         container,
         text="Type values directly. Invalid input keeps last value.",
         anchor="w",
         justify="left",
-    ).grid(row=len(PARAM_SPECS), column=0, columnspan=6, sticky="w", pady=(10, 0))
+    ).grid(row=rows_per_column, column=0, columnspan=12, sticky="w", pady=(10, 0))
+
+    try:
+        params_window.lift()
+        params_window.focus_force()
+    except tk.TclError:
+        pass
 
 def close_params_window():
     global params_window_open, params_window, params_vars
@@ -1071,7 +1110,7 @@ def run_standalone_edge_detector():
             overlay_thickness = max(2, int(round(2 * ui_scale)))
             rx1, ry1, rx2, ry2 = result["roi_box"]
             display[ry1:ry2, rx1:rx2] = apply_image_adjustments(display[ry1:ry2, rx1:rx2], params)
-            cv2.rectangle(display, (rx1, ry1), (rx2 - 1, ry2), (80, 80, 80), overlay_thickness)
+            draw_roi_overlay(display, result)
 
             if params["show_edges"]:
                 edges = result["edges"]

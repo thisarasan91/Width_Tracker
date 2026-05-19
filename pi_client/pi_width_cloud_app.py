@@ -1352,10 +1352,9 @@ def render_sequence_screen(width: int, height: int) -> np.ndarray:
 
 def draw_detection_overlay(display: np.ndarray, result: dict[str, Any], params: dict[str, Any]) -> np.ndarray:
     ui_scale = edge_detect.get_ui_scale(display)
-    overlay_thickness = max(2, int(round(2 * ui_scale)))
     rx1, ry1, rx2, ry2 = result["roi_box"]
     display[ry1:ry2, rx1:rx2] = edge_detect.apply_image_adjustments(display[ry1:ry2, rx1:rx2], params)
-    cv2.rectangle(display, (rx1, ry1), (rx2 - 1, ry2), (80, 80, 80), overlay_thickness)
+    edge_detect.draw_roi_overlay(display, result)
 
     if params["show_edges"]:
         edges = result["edges"]
@@ -1568,6 +1567,20 @@ def init_camera() -> Any:
     return picam2
 
 
+def apply_cloud_window_layout(screen_w: int, screen_h: int) -> None:
+    if edge_detect.params_window_open:
+        preview_w = min(320, screen_w)
+        preview_h = min(220, screen_h)
+        cv2.setWindowProperty(WINDOW_CLOUD, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_NORMAL)
+        cv2.resizeWindow(WINDOW_CLOUD, preview_w, preview_h)
+        cv2.moveWindow(WINDOW_CLOUD, max(0, screen_w - preview_w), max(0, screen_h - preview_h))
+        return
+
+    cv2.setWindowProperty(WINDOW_CLOUD, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+    cv2.resizeWindow(WINDOW_CLOUD, screen_w, screen_h)
+    cv2.moveWindow(WINDOW_CLOUD, 0, 0)
+
+
 def main() -> int:
     edge_detect.setup_external_display()
     screen_w, screen_h = edge_detect.detect_screen_size()
@@ -1601,10 +1614,14 @@ def main() -> int:
     show_splash(screen_w, screen_h, "Ready", 1.0)
     time.sleep(0.25)
     app.note_activity()
+    params_window_was_open = False
 
     try:
         while True:
             edge_detect.process_params_window_events()
+            if params_window_was_open != edge_detect.params_window_open:
+                apply_cloud_window_layout(screen_w, screen_h)
+                params_window_was_open = edge_detect.params_window_open
             app.update_upload_state()
 
             if app.state == "programs":
@@ -1680,6 +1697,8 @@ def main() -> int:
                     edge_detect.open_params_window()
                 else:
                     edge_detect.close_params_window()
+                apply_cloud_window_layout(screen_w, screen_h)
+                params_window_was_open = edge_detect.params_window_open
             if key == ord("c") and app.latest_result is not None:
                 if edge_detect.pending_calibration_width_mm is not None and app.latest_result.get("ok"):
                     edge_detect.save_current_calibration(app.latest_result)
