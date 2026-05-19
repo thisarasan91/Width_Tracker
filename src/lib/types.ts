@@ -39,6 +39,14 @@ export type DeviceProgramAssignment = {
   is_active: boolean;
 };
 
+export type DeviceSettings = {
+  device_id: string;
+  edge_settings: Record<string, unknown>;
+  app_settings: Record<string, unknown>;
+  updated_by: string | null;
+  updated_at: string;
+};
+
 export type Measurement = {
   id: string;
   device_id: string;

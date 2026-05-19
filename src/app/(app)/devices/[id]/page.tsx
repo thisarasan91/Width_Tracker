@@ -3,12 +3,13 @@ import Link from "next/link";
 import { XCircle } from "lucide-react";
 import { AssignmentForm } from "@/components/AssignmentForm";
 import { DeviceForm } from "@/components/DeviceForm";
+import { DeviceSettingsForm } from "@/components/DeviceSettingsForm";
 import { RotateTokenForm } from "@/components/RotateTokenForm";
 import { StatusBadge } from "@/components/StatusBadge";
 import { deactivateAssignmentAction } from "@/lib/actions";
 import { createClient } from "@/lib/supabase/server";
 import { effectiveDeviceStatus, formatDateTime, formatNumber } from "@/lib/format";
-import type { Device, Measurement, Program } from "@/lib/types";
+import type { Device, DeviceSettings, Measurement, Program } from "@/lib/types";
 
 type DeviceDetailPageProps = {
   params: Promise<{
@@ -19,7 +20,7 @@ type DeviceDetailPageProps = {
 export default async function DeviceDetailPage({ params }: DeviceDetailPageProps) {
   const { id } = await params;
   const supabase = await createClient();
-  const [deviceResult, assignmentsResult, programsResult, measurementsResult] = await Promise.all([
+  const [deviceResult, assignmentsResult, programsResult, measurementsResult, settingsResult] = await Promise.all([
     supabase.from("devices").select("*").eq("id", id).maybeSingle(),
     supabase
       .from("device_program_assignments")
@@ -33,7 +34,8 @@ export default async function DeviceDetailPage({ params }: DeviceDetailPageProps
       .select("*, program:programs(program_name)")
       .eq("device_id", id)
       .order("sent_at", { ascending: false })
-      .limit(50)
+      .limit(50),
+    supabase.from("device_settings").select("*").eq("device_id", id).maybeSingle()
   ]);
 
   if (!deviceResult.data) {
@@ -53,6 +55,7 @@ export default async function DeviceDetailPage({ params }: DeviceDetailPageProps
     }>
   ).filter((assignment) => assignment.is_active && assignment.program?.is_active);
   const programs = (programsResult.data ?? []) as Program[];
+  const settings = (settingsResult.data ?? null) as DeviceSettings | null;
   const measurements = (measurementsResult.data ?? []) as Array<
     Measurement & {
       program: { program_name: string } | null;
@@ -92,6 +95,7 @@ export default async function DeviceDetailPage({ params }: DeviceDetailPageProps
 
       <DeviceForm device={device} />
       <RotateTokenForm deviceId={device.id} />
+      <DeviceSettingsForm deviceId={device.id} settings={settings} />
       <AssignmentForm deviceId={device.id} programs={programs} />
 
       <section className="panel">

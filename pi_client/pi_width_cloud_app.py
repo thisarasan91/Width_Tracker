@@ -26,7 +26,7 @@ import numpy as np
 import requests
 
 import edge_detect
-from width_device_client import DeviceClientError, fetch_programs, local_timestamp_iso, upload_measurement
+from width_device_client import DeviceClientError, fetch_device_settings, fetch_programs, local_timestamp_iso, upload_measurement
 
 
 WINDOW_CLOUD = "TB Meter"
@@ -37,7 +37,7 @@ PROGRAM_CACHE_PATH = Path(os.getenv("WIDTH_PROGRAM_CACHE_PATH", str(APP_DIR / "p
 SPLASH_IMAGE_PATH = Path(os.getenv("WIDTH_SPLASH_IMAGE_PATH", str(APP_DIR / "splash_image.png")))
 SPLASH_IMAGE_SCALE = float(os.getenv("WIDTH_SPLASH_IMAGE_SCALE", "0.35"))
 LOCAL_SYNC_INTERVAL_SECONDS = float(os.getenv("WIDTH_LOCAL_SYNC_INTERVAL_SECONDS", "20"))
-INACTIVITY_SHUTDOWN_SECONDS = float(os.getenv("WIDTH_INACTIVITY_SHUTDOWN_SECONDS", "180"))
+INACTIVITY_SHUTDOWN_SECONDS = float(os.getenv("WIDTH_INACTIVITY_SHUTDOWN_SECONDS", "300"))
 SHUTDOWN_WARNING_SECONDS = float(os.getenv("WIDTH_SHUTDOWN_WARNING_SECONDS", "30"))
 ENABLE_AUTO_SHUTDOWN = os.getenv("WIDTH_ENABLE_AUTO_SHUTDOWN", "true").lower() != "false"
 
@@ -119,6 +119,43 @@ def read_settings_json() -> dict[str, Any]:
         return {}
 
     return data if isinstance(data, dict) else {}
+
+
+def write_settings_json(payload: dict[str, Any]) -> None:
+    try:
+        with open(edge_detect.get_settings_path(), "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2)
+    except OSError:
+        pass
+
+
+def sync_cloud_settings_to_local_file() -> str:
+    try:
+        payload = fetch_device_settings()
+    except (DeviceClientError, requests.RequestException) as exc:
+        return f"Using local settings: {exc}"
+
+    settings = payload.get("settings")
+    if not payload.get("has_settings") or not isinstance(settings, dict):
+        return "Using local settings"
+
+    edge_settings = settings.get("edge_settings")
+    app_settings = settings.get("app_settings")
+    merged = read_settings_json()
+    changed = False
+
+    if isinstance(edge_settings, dict):
+        merged.update(edge_settings)
+        changed = True
+    if isinstance(app_settings, dict):
+        merged.update(app_settings)
+        changed = True
+
+    if changed:
+        write_settings_json(merged)
+        return "Device settings synced"
+
+    return "No cloud settings found"
 
 
 def save_program_cache(payload: dict[str, Any]) -> None:
@@ -324,13 +361,156 @@ def env_or_json_float(
     return clamp_float(parsed if parsed is not None else default, minimum, maximum)
 
 
+def parse_bool(value: Any, default: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    return default
+
+
+def env_or_json_bool(
+    env_key: str,
+    data: dict[str, Any],
+    json_keys: tuple[str, ...],
+    default: bool,
+) -> bool:
+    env_value = os.getenv(env_key)
+    raw_value = env_value if env_value not in (None, "") else first_setting(data, *json_keys)
+    return parse_bool(raw_value, default)
+
+
+def env_or_json_int(
+    env_key: str,
+    data: dict[str, Any],
+    json_keys: tuple[str, ...],
+    default: int,
+    minimum: int,
+    maximum: int,
+) -> int:
+    value = env_or_json_float(env_key, data, json_keys, float(default), float(minimum), float(maximum))
+    return int(round(value))
+
+
 def load_alignment_settings() -> None:
+    global SPLASH_IMAGE_SCALE
+    global LOCAL_SYNC_INTERVAL_SECONDS
+    global INACTIVITY_SHUTDOWN_SECONDS
+    global SHUTDOWN_WARNING_SECONDS
+    global ENABLE_AUTO_SHUTDOWN
+    global STABLE_SECONDS
+    global COUNTDOWN_SECONDS
+    global STABLE_TOLERANCE_MM
+    global STABLE_TOLERANCE_PX
+    global REQUIRE_CENTER_ALIGNMENT
+    global MANUAL_VERTICAL_ALIGNMENT_TOLERANCE_DEG
+    global REMOVAL_SECONDS
+    global FONT_THICKNESS_SCALE
     global CENTER_ALIGNMENT_TOLERANCE_RATIO
     global CENTER_ALIGNMENT_TOLERANCE_PX
     global ANGLE_ALIGNMENT_TOLERANCE_DEG
-    global MANUAL_VERTICAL_ALIGNMENT_TOLERANCE_DEG
 
     data = read_settings_json()
+
+    SPLASH_IMAGE_SCALE = env_or_json_float(
+        "WIDTH_SPLASH_IMAGE_SCALE",
+        data,
+        ("splash_image_scale", "width_splash_image_scale"),
+        SPLASH_IMAGE_SCALE,
+        0.15,
+        0.8,
+    )
+    LOCAL_SYNC_INTERVAL_SECONDS = env_or_json_float(
+        "WIDTH_LOCAL_SYNC_INTERVAL_SECONDS",
+        data,
+        ("local_sync_interval_seconds",),
+        LOCAL_SYNC_INTERVAL_SECONDS,
+        5.0,
+        3600.0,
+    )
+    INACTIVITY_SHUTDOWN_SECONDS = env_or_json_float(
+        "WIDTH_INACTIVITY_SHUTDOWN_SECONDS",
+        data,
+        ("inactivity_shutdown_seconds", "auto_shutdown_seconds"),
+        INACTIVITY_SHUTDOWN_SECONDS,
+        60.0,
+        86400.0,
+    )
+    SHUTDOWN_WARNING_SECONDS = env_or_json_float(
+        "WIDTH_SHUTDOWN_WARNING_SECONDS",
+        data,
+        ("shutdown_warning_seconds",),
+        SHUTDOWN_WARNING_SECONDS,
+        5.0,
+        max(5.0, INACTIVITY_SHUTDOWN_SECONDS),
+    )
+    ENABLE_AUTO_SHUTDOWN = env_or_json_bool(
+        "WIDTH_ENABLE_AUTO_SHUTDOWN",
+        data,
+        ("enable_auto_shutdown",),
+        ENABLE_AUTO_SHUTDOWN,
+    )
+    STABLE_SECONDS = env_or_json_float(
+        "WIDTH_STABLE_SECONDS",
+        data,
+        ("stable_seconds",),
+        STABLE_SECONDS,
+        0.1,
+        30.0,
+    )
+    COUNTDOWN_SECONDS = env_or_json_int(
+        "WIDTH_COUNTDOWN_SECONDS",
+        data,
+        ("countdown_seconds",),
+        COUNTDOWN_SECONDS,
+        1,
+        30,
+    )
+    STABLE_TOLERANCE_MM = env_or_json_float(
+        "WIDTH_STABLE_TOLERANCE_MM",
+        data,
+        ("stable_tolerance_mm",),
+        STABLE_TOLERANCE_MM,
+        0.001,
+        100.0,
+    )
+    STABLE_TOLERANCE_PX = env_or_json_float(
+        "WIDTH_STABLE_TOLERANCE_PX",
+        data,
+        ("stable_tolerance_px",),
+        STABLE_TOLERANCE_PX,
+        0.001,
+        10000.0,
+    )
+    REQUIRE_CENTER_ALIGNMENT = env_or_json_bool(
+        "WIDTH_REQUIRE_CENTER_ALIGNMENT",
+        data,
+        ("require_center_alignment",),
+        REQUIRE_CENTER_ALIGNMENT,
+    )
+    REMOVAL_SECONDS = env_or_json_float(
+        "WIDTH_REMOVAL_SECONDS",
+        data,
+        ("removal_seconds",),
+        REMOVAL_SECONDS,
+        0.1,
+        30.0,
+    )
+    FONT_THICKNESS_SCALE = env_or_json_float(
+        "WIDTH_FONT_THICKNESS_SCALE",
+        data,
+        ("font_thickness_scale",),
+        FONT_THICKNESS_SCALE,
+        0.1,
+        2.0,
+    )
+    edge_detect.FONT_THICKNESS_SCALE = FONT_THICKNESS_SCALE
 
     CENTER_ALIGNMENT_TOLERANCE_RATIO = env_or_json_float(
         "WIDTH_CENTER_ALIGNMENT_TOLERANCE_RATIO",
@@ -498,7 +678,8 @@ class WidthCloudApp:
         self.sync_thread: threading.Thread | None = None
         self.sync_message = ""
         self.local_queue_count = len(read_local_queue())
-        self.last_activity_at = time.time()
+        self.tape_present = False
+        self.idle_started_at: float | None = time.time()
         self.shutdown_started = False
 
     def build_manual_program(self) -> dict[str, Any]:
@@ -534,24 +715,34 @@ class WidthCloudApp:
         self.reset_capture_state()
 
     def note_activity(self) -> None:
-        self.last_activity_at = time.time()
+        self.idle_started_at = None if self.tape_present else time.time()
         self.shutdown_started = False
 
+    def update_tape_activity(self, tape_present: bool) -> None:
+        self.tape_present = tape_present
+        if tape_present:
+            self.idle_started_at = None
+            self.shutdown_started = False
+            return
+
+        if self.idle_started_at is None:
+            self.idle_started_at = time.time()
+
     def shutdown_warning_remaining(self) -> int | None:
-        if not ENABLE_AUTO_SHUTDOWN:
+        if not ENABLE_AUTO_SHUTDOWN or self.idle_started_at is None:
             return None
 
-        elapsed = time.time() - self.last_activity_at
+        elapsed = time.time() - self.idle_started_at
         remaining = int(math.ceil(INACTIVITY_SHUTDOWN_SECONDS - elapsed))
         if remaining <= int(SHUTDOWN_WARNING_SECONDS):
             return max(0, remaining)
         return None
 
     def maybe_shutdown_for_inactivity(self) -> bool:
-        if not ENABLE_AUTO_SHUTDOWN or self.shutdown_started:
+        if not ENABLE_AUTO_SHUTDOWN or self.shutdown_started or self.idle_started_at is None:
             return False
 
-        if time.time() - self.last_activity_at < INACTIVITY_SHUTDOWN_SECONDS:
+        if time.time() - self.idle_started_at < INACTIVITY_SHUTDOWN_SECONDS:
             return False
 
         self.shutdown_started = True
@@ -793,6 +984,7 @@ class WidthCloudApp:
             unit = "px"
 
         self.latest_unit = unit
+        self.update_tape_activity(bool(result.get("ok")) and width_value is not None)
 
         aligned = bool(alignment_status.get("aligned")) if REQUIRE_CENTER_ALIGNMENT else True
         can_capture = bool(result.get("ok")) and width_value is not None and aligned
@@ -1388,10 +1580,16 @@ def main() -> int:
     cv2.setWindowProperty(WINDOW_CLOUD, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
     cv2.setMouseCallback(WINDOW_CLOUD, mouse_callback)
 
+    load_alignment_settings()
+    show_splash(screen_w, screen_h, "Syncing device settings...", 0.1)
+    settings_message = sync_cloud_settings_to_local_file()
+    load_alignment_settings()
+
     show_splash(screen_w, screen_h, "Loading camera settings...", 0.15)
     edge_detect.load_params_from_file()
     load_alignment_settings()
 
+    show_splash(screen_w, screen_h, settings_message[:70], 0.25)
     show_splash(screen_w, screen_h, "Connecting to cloud and loading assigned programs...", 0.35)
     app.load_programs()
 

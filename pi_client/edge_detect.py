@@ -218,6 +218,16 @@ def load_params_from_file():
 def save_params_to_file():
     settings_path = get_settings_path()
     payload = {}
+
+    if os.path.exists(settings_path):
+        try:
+            with open(settings_path, "r", encoding="utf-8") as handle:
+                existing_payload = json.load(handle)
+            if isinstance(existing_payload, dict):
+                payload.update(existing_payload)
+        except Exception:
+            payload = {}
+
     for key, _, min_val, max_val in PARAM_SPECS:
         payload[key] = clamp(int(params_values[key]), min_val, max_val)
     payload["use_mm"] = USE_MM

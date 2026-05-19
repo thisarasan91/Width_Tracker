@@ -45,6 +45,26 @@ function parseOptionalNumber(formData: FormData, key: string) {
   return Number.isFinite(value) ? value : Number.NaN;
 }
 
+function parseJsonObject(formData: FormData, key: string, label: string) {
+  const rawValue = asText(formData, key);
+  if (!rawValue) {
+    return {};
+  }
+
+  try {
+    const value = JSON.parse(rawValue);
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error(`${label} must be a JSON object.`);
+    }
+    return value as Record<string, unknown>;
+  } catch (error) {
+    if (error instanceof Error) {
+      throw new Error(`${label}: ${error.message}`);
+    }
+    throw new Error(`${label} must be valid JSON.`);
+  }
+}
+
 function errorState(error: unknown, fallback: string): ActionState {
   if (error instanceof Error && error.message) {
     return {
@@ -218,6 +238,52 @@ export async function rotateDeviceTokenAction(
     };
   } catch (error) {
     return errorState(error, "Could not rotate device token.");
+  }
+}
+
+export async function updateDeviceSettingsAction(
+  _previousState: ActionState = INITIAL_STATE,
+  formData: FormData
+): Promise<ActionState> {
+  try {
+    const user = await requireUser();
+    const deviceId = asText(formData, "device_id");
+
+    if (!deviceId) {
+      return {
+        ok: false,
+        message: "Device id is required."
+      };
+    }
+
+    const edgeSettings = parseJsonObject(formData, "edge_settings", "Edge settings");
+    const appSettings = parseJsonObject(formData, "app_settings", "App settings");
+
+    const supabase = await createClient();
+    const { error } = await supabase.from("device_settings").upsert(
+      {
+        device_id: deviceId,
+        edge_settings: edgeSettings,
+        app_settings: appSettings,
+        updated_by: user.id
+      },
+      {
+        onConflict: "device_id"
+      }
+    );
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    revalidatePath(`/devices/${deviceId}`);
+
+    return {
+      ok: true,
+      message: "Device settings saved. The Pi will sync them at startup."
+    };
+  } catch (error) {
+    return errorState(error, "Could not save device settings.");
   }
 }
 

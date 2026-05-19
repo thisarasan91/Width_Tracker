@@ -388,6 +388,13 @@ textarea {
   resize: vertical;
 }
 
+.settings-textarea {
+  min-height: 360px;
+  font-family: "Cascadia Code", "Roboto Mono", Consolas, monospace;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
 input:focus,
 select:focus,
 textarea:focus {

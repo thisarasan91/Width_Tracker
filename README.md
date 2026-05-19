@@ -63,6 +63,7 @@ Or paste each migration into the Supabase SQL editor:
 - `supabase/migrations/202605030001_initial_schema.sql`
 - `supabase/migrations/202605030002_rls_policies.sql`
 - `supabase/migrations/202605080001_program_tolerances.sql`
+- `supabase/migrations/202605190001_device_settings.sql`
 
 The schema includes:
 
@@ -94,9 +95,10 @@ The schema includes:
    ```
 
 8. Open the device detail page and assign one or more active programs.
-9. View uploaded readings on `/measurements`.
-10. Use `/reports` for live width-vs-time graphs, filtered CSV export, and PDF reports.
-11. Export CSV from `/measurements` with the Export CSV button.
+9. Edit per-device Pi parameters from the device detail page when edge or app settings need to be changed remotely.
+10. View uploaded readings on `/measurements`.
+11. Use `/reports` for live width-vs-time graphs, filtered CSV export, and PDF reports.
+12. Export CSV from `/measurements` with the Export CSV button.
 
 ## Device API
 
@@ -215,6 +217,8 @@ sudo reboot
 The installer creates the `tb-meter.service` systemd service, starts `tb-meter-start.sh`, hides the Raspberry Pi boot splash where supported, and launches the TB Meter splash screen before the app loads. It also sets `WIDTH_FONT_THICKNESS_SCALE=0.55` so the Pi UI text is lighter. Increase or decrease that value in the service if the LCD needs a different weight.
 
 This opens the Pi main screen with assigned cloud programs as buttons. Tapping a program shows the expected measurement sequence from Supabase, then the camera screen captures each reading automatically after the detected width is stable and the `Stabilized, getting data, 3,2,1` countdown completes.
+
+At startup, `pi_width_cloud_app.py` checks `/api/device/settings` for saved settings for that Pi device. If settings exist, it merges the cloud edge/app parameters into `pi_client/edge_detect_settings.json` before loading the detector, while preserving calibration values such as `use_mm` and `mm_per_pixel`.
 
 The Pi first screen also has a `Manual` button. Manual mode is live-only: it continuously shows the current width without taking a measurement sequence or uploading values.
 

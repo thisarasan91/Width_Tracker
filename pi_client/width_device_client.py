@@ -93,6 +93,22 @@ def fetch_programs() -> dict[str, Any]:
     return payload
 
 
+def fetch_device_settings() -> dict[str, Any]:
+    response = requests.get(
+        f"{API_BASE}/api/device/settings",
+        headers=headers(),
+        timeout=20,
+    )
+    if response.status_code != 200:
+        raise DeviceClientError(f"Could not fetch device settings: {response.text}")
+
+    payload = response.json()
+    if not payload.get("success"):
+        raise DeviceClientError(payload.get("message", "Device settings fetch failed."))
+
+    return payload
+
+
 def local_timestamp_iso() -> str:
     if ZoneInfo is not None:
         try:
