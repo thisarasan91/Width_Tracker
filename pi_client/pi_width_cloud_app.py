@@ -871,10 +871,13 @@ class WidthCloudApp:
 
     def capture_current_reading(self, value: float, unit: str) -> None:
         label = self.current_label()
+        rounded_value = round(float(value), 2)
+        self.latest_width = rounded_value
+        self.latest_unit = unit
         self.readings.append(
             {
                 "reading_label": label,
-                "reading_value": round(float(value), 2),
+                "reading_value": rounded_value,
                 "unit": unit,
                 "measured_at": local_timestamp_iso(),
             }
@@ -1047,6 +1050,9 @@ class WidthCloudApp:
 
             averaged_width = sum(self.capture_samples[-AVERAGE_SAMPLE_COUNT:]) / AVERAGE_SAMPLE_COUNT
             self.capture_current_reading(averaged_width, unit)
+            tolerance_message = self.tolerance_message(averaged_width, unit)
+            if tolerance_message:
+                return f"{tolerance_message}: {averaged_width:.2f} {unit}"
             return f"Captured avg {averaged_width:.2f} {unit}"
 
         remaining = max(1, math.ceil(COUNTDOWN_SECONDS - elapsed))
@@ -1080,8 +1086,13 @@ class WidthCloudApp:
         if value is None or limits is None or active_unit != "mm":
             return "unknown"
 
+        try:
+            measured_value = round(float(value), 2)
+        except (TypeError, ValueError):
+            return "unknown"
+
         min_allowed, _, max_allowed = limits
-        return "in" if min_allowed <= value <= max_allowed else "out"
+        return "in" if min_allowed <= measured_value <= max_allowed else "out"
 
     def tolerance_color(self, value: float | None, unit: str | None = None) -> tuple[int, int, int]:
         status = self.tolerance_status(value, unit)
@@ -1090,6 +1101,14 @@ class WidthCloudApp:
         if status == "out":
             return COLOR_DANGER
         return COLOR_TEXT
+
+    def tolerance_message(self, value: float | None, unit: str | None = None) -> str:
+        status = self.tolerance_status(value, unit)
+        if status == "in":
+            return "Within tolerance"
+        if status == "out":
+            return "Out of tolerance"
+        return ""
 
     def tolerance_footer_text(self) -> str:
         limits = self.tolerance_limits()
@@ -1395,7 +1414,13 @@ def draw_measurement_hud(display: np.ndarray, status_text: str) -> np.ndarray:
     cloud_text = "Cloud ON" if app.send_to_cloud_enabled else "Cloud OFF"
     draw_text(display, cloud_text, (width - 250, 32), 0.52, COLOR_SUCCESS if app.send_to_cloud_enabled else COLOR_WARNING, 2)
 
-    status_color = COLOR_SUCCESS if "Stabilized" in status_text or "Captured" in status_text else COLOR_TEXT
+    tolerance_status = app.tolerance_status(app.latest_width, app.latest_unit)
+    if tolerance_status in {"in", "out"}:
+        status_color = app.tolerance_color(app.latest_width, app.latest_unit)
+    elif "Stabilized" in status_text or "Captured" in status_text:
+        status_color = COLOR_SUCCESS
+    else:
+        status_color = COLOR_TEXT
     draw_text(display, status_text[:36], (16, 104), 0.66, status_color, 2)
 
     if app.latest_width is not None:
@@ -1414,7 +1439,10 @@ def draw_measurement_hud(display: np.ndarray, status_text: str) -> np.ndarray:
 
     if status_text.startswith("Stabilized"):
         countdown = status_text.rsplit(" ", 1)[-1]
-        draw_text(display, countdown, (width // 2 - 38, display.shape[0] // 2 + 42), 3.0, COLOR_SUCCESS, 7)
+        countdown_color = app.tolerance_color(app.latest_width, app.latest_unit)
+        if countdown_color == COLOR_TEXT:
+            countdown_color = COLOR_SUCCESS
+        draw_text(display, countdown, (width // 2 - 38, display.shape[0] // 2 + 42), 3.0, countdown_color, 7)
 
     draw_text(display, app.tolerance_footer_text(), (16, display.shape[0] - 50), 0.48, COLOR_WARNING, 2)
 
