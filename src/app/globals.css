@@ -285,6 +285,75 @@ table {
   stroke-width: 2;
 }
 
+.live-chart-line {
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.live-chart-point {
+  stroke: #ffffff;
+  stroke-width: 2;
+}
+
+.live-tolerance-line {
+  stroke-width: 2;
+  stroke-dasharray: 8 6;
+}
+
+.live-tolerance-line.upper {
+  stroke: #dc2626;
+}
+
+.live-tolerance-line.lower {
+  stroke: #ca8a04;
+}
+
+.live-tolerance-label {
+  fill: #475467;
+  font-size: 12px;
+  letter-spacing: 0;
+}
+
+.live-legend,
+.live-program-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.live-legend {
+  margin-top: 12px;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.legend-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+}
+
+.legend-line {
+  width: 24px;
+  border-top: 2px dashed #667085;
+}
+
+.legend-line.danger {
+  border-color: #dc2626;
+}
+
+.legend-line.warning {
+  border-color: #ca8a04;
+}
+
 .chart-label {
   fill: var(--muted);
   font-size: 12px;

@@ -33,6 +33,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <Database aria-hidden="true" className="icon" />
             Measurements
           </Link>
+          <Link className="nav-link" href="/live">
+            <Activity aria-hidden="true" className="icon" />
+            Live
+          </Link>
           <Link className="nav-link" href="/reports">
             <BarChart3 aria-hidden="true" className="icon" />
             Reports
