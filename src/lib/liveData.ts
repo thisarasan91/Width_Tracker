@@ -41,7 +41,11 @@ function programLabels(program: Pick<Program, "labels_for_each_reading">) {
     : [];
 }
 
-export async function getLivePayload(supabase: SupabaseClientLike, programId: string): Promise<LivePayload> {
+export async function getLivePayload(
+  supabase: SupabaseClientLike,
+  programId: string,
+  readingLabel = ""
+): Promise<LivePayload> {
   const { data: program, error: programError } = await supabase
     .from("programs")
     .select("id, program_name, nominal_width, upper_tolerance, lower_tolerance, labels_for_each_reading")
@@ -57,14 +61,20 @@ export async function getLivePayload(supabase: SupabaseClientLike, programId: st
     throw new Error("Active program not found.");
   }
 
-  const labels = programLabels(program as Program);
+  const allLabels = programLabels(program as Program);
+  const labels = readingLabel ? [readingLabel] : allLabels;
   const targetLabels = new Set(labels);
-  const { data, error } = await supabase
+  let query = supabase
     .from("measurements")
     .select("sent_at, reading_label, reading_value, unit")
     .eq("program_id", programId)
-    .order("sent_at", { ascending: false })
-    .limit(600);
+    .order("sent_at", { ascending: false });
+
+  if (readingLabel) {
+    query = query.eq("reading_label", readingLabel);
+  }
+
+  const { data, error } = await query.limit(readingLabel ? 10 : 600);
 
   if (error) {
     throw new Error(error.message);

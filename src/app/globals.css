@@ -354,6 +354,78 @@ table {
   border-color: #ca8a04;
 }
 
+.value-filter-field {
+  position: relative;
+  display: grid;
+  gap: 8px;
+}
+
+.value-filter-trigger {
+  display: inline-flex;
+  min-height: 44px;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  padding: 10px 12px;
+}
+
+.value-filter-popover {
+  position: absolute;
+  z-index: 25;
+  top: calc(100% + 8px);
+  left: 0;
+  width: min(280px, 92vw);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.14);
+  padding: 10px;
+}
+
+.value-filter-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 8px;
+}
+
+.value-filter-actions button {
+  border: 0;
+  background: transparent;
+  color: var(--primary);
+  cursor: pointer;
+  font: inherit;
+  padding: 4px 6px;
+}
+
+.value-filter-options {
+  display: grid;
+  max-height: 220px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.value-filter-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 2px;
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.value-filter-option input {
+  width: 15px;
+  height: 15px;
+}
+
 .chart-label {
   fill: var(--muted);
   font-size: 12px;

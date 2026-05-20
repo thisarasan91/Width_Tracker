@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { measurementsToCsv } from "@/lib/csv";
-import { localInputToTimestamptz, readMeasurementFilters } from "@/lib/measurementFilters";
+import { localInputToTimestamptz, readMeasurementFilters, searchParamsToRecord } from "@/lib/measurementFilters";
 import { createClient } from "@/lib/supabase/server";
 import type { Measurement } from "@/lib/types";
 
@@ -17,8 +17,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const searchParams = Object.fromEntries(new URL(request.url).searchParams.entries());
-  const filters = readMeasurementFilters(searchParams);
+  const searchParams = new URL(request.url).searchParams;
+  const filters = readMeasurementFilters(searchParamsToRecord(searchParams));
 
   let query = supabase
     .from("measurements")
@@ -43,7 +43,15 @@ export async function GET(request: Request) {
     query = query.lte("sent_at", localInputToTimestamptz(filters.to, true));
   }
 
-  const { data, error } = await query.limit(10000);
+  const selectedValueNumbers = filters.values.map(Number).filter(Number.isFinite);
+  const valueFilterHasNoSelection = filters.valueFilterActive && selectedValueNumbers.length === 0;
+  if (filters.valueFilterActive && selectedValueNumbers.length > 0) {
+    query = query.in("reading_value", selectedValueNumbers);
+  }
+
+  const { data, error } = valueFilterHasNoSelection
+    ? { data: [], error: null }
+    : await query.limit(10000);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

@@ -9,6 +9,7 @@ import type { Program } from "@/lib/types";
 type LiveClientProps = {
   programs: Program[];
   initialProgramId: string;
+  initialReadingLabel: string;
 };
 
 type ChartPoint = {
@@ -189,8 +190,9 @@ function LiveChart({ payload }: { payload: LivePayload }) {
   );
 }
 
-export function LiveClient({ programs, initialProgramId }: LiveClientProps) {
+export function LiveClient({ programs, initialProgramId, initialReadingLabel }: LiveClientProps) {
   const [selectedProgramId, setSelectedProgramId] = useState(initialProgramId);
+  const [selectedReadingLabel, setSelectedReadingLabel] = useState(initialReadingLabel);
   const [payload, setPayload] = useState<LivePayload | null>(null);
   const [isLoading, setIsLoading] = useState(Boolean(initialProgramId));
   const [error, setError] = useState("");
@@ -200,6 +202,8 @@ export function LiveClient({ programs, initialProgramId }: LiveClientProps) {
     () => programs.find((program) => program.id === selectedProgramId) ?? null,
     [programs, selectedProgramId]
   );
+  const readingLabels = selectedProgram?.labels_for_each_reading ?? [];
+  const activeReadingLabel = readingLabels.includes(selectedReadingLabel) ? selectedReadingLabel : "";
 
   useEffect(() => {
     if (!selectedProgramId) {
@@ -214,7 +218,12 @@ export function LiveClient({ programs, initialProgramId }: LiveClientProps) {
       setIsLoading(true);
       setError("");
       try {
-        const response = await fetch(`/api/live/data?programId=${encodeURIComponent(selectedProgramId)}`, {
+        const params = new URLSearchParams({ programId: selectedProgramId });
+        if (activeReadingLabel) {
+          params.set("readingLabel", activeReadingLabel);
+        }
+
+        const response = await fetch(`/api/live/data?${params.toString()}`, {
           cache: "no-store"
         });
         const body = await response.json();
@@ -243,12 +252,27 @@ export function LiveClient({ programs, initialProgramId }: LiveClientProps) {
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [selectedProgramId]);
+  }, [activeReadingLabel, selectedProgramId]);
 
   function selectProgram(programId: string) {
     setSelectedProgramId(programId);
+    setSelectedReadingLabel("");
     setPayload(null);
     window.history.replaceState(null, "", programId ? `/live?programId=${encodeURIComponent(programId)}` : "/live");
+  }
+
+  function selectReadingLabel(readingLabel: string) {
+    setSelectedReadingLabel(readingLabel);
+    setPayload(null);
+    const params = new URLSearchParams();
+    if (selectedProgramId) {
+      params.set("programId", selectedProgramId);
+    }
+    if (readingLabel) {
+      params.set("readingLabel", readingLabel);
+    }
+    const query = params.toString();
+    window.history.replaceState(null, "", query ? `/live?${query}` : "/live");
   }
 
   return (
@@ -271,6 +295,17 @@ export function LiveClient({ programs, initialProgramId }: LiveClientProps) {
               {programs.map((program) => (
                 <option key={program.id} value={program.id}>
                   {programOptionLabel(program)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Reading
+            <select value={activeReadingLabel} onChange={(event) => selectReadingLabel(event.target.value)}>
+              <option value="">All readings</option>
+              {readingLabels.map((label) => (
+                <option key={label} value={label}>
+                  {label}
                 </option>
               ))}
             </select>

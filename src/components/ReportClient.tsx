@@ -220,7 +220,7 @@ export function ReportClient({ devices, programs, initialFilters }: ReportClient
               className="button secondary"
               type="button"
               onClick={() => {
-                const cleared = { deviceId: "", programId: "", from: "", to: "" };
+                const cleared = { deviceId: "", programId: "", from: "", to: "", values: [], valueFilterActive: false };
                 setDraftFilters(cleared);
                 setActiveFilters(cleared);
                 window.history.replaceState(null, "", "/reports");
