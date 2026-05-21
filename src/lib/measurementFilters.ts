@@ -5,8 +5,8 @@ export type MeasurementFilters = {
   programId: string;
   from: string;
   to: string;
-  values: string[];
-  valueFilterActive: boolean;
+  readingLabels: string[];
+  readingFilterActive: boolean;
 };
 
 export function firstParam(value: string | string[] | undefined) {
@@ -32,27 +32,16 @@ export function searchParamsToRecord(searchParams: URLSearchParams) {
   return record;
 }
 
-export function normalizeMeasurementValue(value: string | number | null | undefined) {
-  if (value === null || value === undefined || value === "") {
-    return "";
-  }
-
-  const parsed = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(parsed) ? parsed.toFixed(2) : "";
-}
-
 export function readMeasurementFilters(searchParams: Record<string, string | string[] | undefined>): MeasurementFilters {
-  const values = Array.from(
-    new Set(allParams(searchParams.values).map((value) => normalizeMeasurementValue(value)).filter(Boolean))
-  );
+  const readingLabels = Array.from(new Set(allParams(searchParams.reading_label).map((value) => value.trim()).filter(Boolean)));
 
   return {
     deviceId: firstParam(searchParams.device_id).trim(),
     programId: firstParam(searchParams.program_id).trim(),
     from: firstParam(searchParams.from).trim(),
     to: firstParam(searchParams.to).trim(),
-    values,
-    valueFilterActive: firstParam(searchParams.value_filter) === "custom"
+    readingLabels,
+    readingFilterActive: firstParam(searchParams.reading_filter) === "custom"
   };
 }
 
@@ -88,10 +77,10 @@ export function buildFilterQueryString(filters: MeasurementFilters) {
   if (filters.to) {
     params.set("to", filters.to);
   }
-  if (filters.valueFilterActive) {
-    params.set("value_filter", "custom");
-    for (const value of filters.values) {
-      params.append("values", value);
+  if (filters.readingFilterActive) {
+    params.set("reading_filter", "custom");
+    for (const label of filters.readingLabels) {
+      params.append("reading_label", label);
     }
   }
 

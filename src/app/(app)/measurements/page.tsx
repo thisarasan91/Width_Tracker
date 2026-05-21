@@ -1,13 +1,12 @@
 import { Download } from "lucide-react";
 import { DateRangePicker } from "@/components/DateRangePicker";
-import { MeasurementValueFilter } from "@/components/MeasurementValueFilter";
+import { MeasurementReadingFilter } from "@/components/MeasurementReadingFilter";
 import { MeasurementsAutoRefresh } from "@/components/MeasurementsAutoRefresh";
 import { createClient } from "@/lib/supabase/server";
 import { formatCompactDateTime, formatNumber } from "@/lib/format";
 import {
   buildFilterQueryString,
   localInputToTimestamptz,
-  normalizeMeasurementValue,
   readMeasurementFilters
 } from "@/lib/measurementFilters";
 import type { Device, Measurement, Program } from "@/lib/types";
@@ -43,35 +42,34 @@ export default async function MeasurementsPage({ searchParams }: MeasurementsPag
     measurementsQuery = measurementsQuery.lte("sent_at", localInputToTimestamptz(filters.to, true));
   }
 
-  const selectedValueNumbers = filters.values.map(Number).filter(Number.isFinite);
-  const valueFilterHasNoSelection = filters.valueFilterActive && selectedValueNumbers.length === 0;
-  if (filters.valueFilterActive && selectedValueNumbers.length > 0) {
-    measurementsQuery = measurementsQuery.in("reading_value", selectedValueNumbers);
+  const readingFilterHasNoSelection = filters.readingFilterActive && filters.readingLabels.length === 0;
+  if (filters.readingFilterActive && filters.readingLabels.length > 0) {
+    measurementsQuery = measurementsQuery.in("reading_label", filters.readingLabels);
   }
 
-  let valueOptionsQuery = supabase.from("measurements").select("reading_value").order("reading_value", { ascending: true });
+  let readingOptionsQuery = supabase.from("measurements").select("reading_label").order("reading_label", { ascending: true });
 
   if (filters.deviceId) {
-    valueOptionsQuery = valueOptionsQuery.eq("device_id", filters.deviceId);
+    readingOptionsQuery = readingOptionsQuery.eq("device_id", filters.deviceId);
   }
 
   if (filters.programId) {
-    valueOptionsQuery = valueOptionsQuery.eq("program_id", filters.programId);
+    readingOptionsQuery = readingOptionsQuery.eq("program_id", filters.programId);
   }
 
   if (filters.from) {
-    valueOptionsQuery = valueOptionsQuery.gte("sent_at", localInputToTimestamptz(filters.from));
+    readingOptionsQuery = readingOptionsQuery.gte("sent_at", localInputToTimestamptz(filters.from));
   }
 
   if (filters.to) {
-    valueOptionsQuery = valueOptionsQuery.lte("sent_at", localInputToTimestamptz(filters.to, true));
+    readingOptionsQuery = readingOptionsQuery.lte("sent_at", localInputToTimestamptz(filters.to, true));
   }
 
-  const [measurementsResult, devicesResult, programsResult, valueOptionsResult] = await Promise.all([
-    valueFilterHasNoSelection ? Promise.resolve({ data: [], error: null }) : measurementsQuery.limit(1000),
+  const [measurementsResult, devicesResult, programsResult, readingOptionsResult] = await Promise.all([
+    readingFilterHasNoSelection ? Promise.resolve({ data: [], error: null }) : measurementsQuery.limit(1000),
     supabase.from("devices").select("*").order("device_name"),
     supabase.from("programs").select("*").order("program_name"),
-    valueOptionsQuery.limit(10000)
+    readingOptionsQuery.limit(10000)
   ]);
 
   const measurements = (measurementsResult.data ?? []) as Array<
@@ -89,16 +87,20 @@ export default async function MeasurementsPage({ searchParams }: MeasurementsPag
   >;
   const devices = (devicesResult.data ?? []) as Device[];
   const programs = (programsResult.data ?? []) as Program[];
-  const valueOptions = Array.from(
+  const readingOptions = Array.from(
     new Set([
-      ...(valueOptionsResult.data ?? []).map((row: { reading_value: string | number | null }) =>
-        normalizeMeasurementValue(row.reading_value)
-      ),
-      ...filters.values
+      ...(readingOptionsResult.data ?? []).map((row: { reading_label: string | null }) => row.reading_label ?? ""),
+      ...filters.readingLabels
     ])
   )
     .filter(Boolean)
-    .sort((left, right) => Number(left) - Number(right));
+    .sort((left, right) => left.localeCompare(right));
+  const tableFilterBaseParams = {
+    device_id: filters.deviceId,
+    program_id: filters.programId,
+    from: filters.from,
+    to: filters.to
+  };
 
   return (
     <div className="page-stack">
@@ -145,11 +147,6 @@ export default async function MeasurementsPage({ searchParams }: MeasurementsPag
             </select>
           </label>
           <DateRangePicker from={filters.from} to={filters.to} idPrefix="measurements-date-range" />
-          <MeasurementValueFilter
-            options={valueOptions}
-            selectedValues={filters.values}
-            filterActive={filters.valueFilterActive}
-          />
           <div className="form-actions">
             <button className="button primary" type="submit">
               Apply filters
@@ -175,7 +172,14 @@ export default async function MeasurementsPage({ searchParams }: MeasurementsPag
                 <th>Date / Time</th>
                 <th>Station</th>
                 <th>Programme</th>
-                <th>Reading</th>
+                <th>
+                  <MeasurementReadingFilter
+                    options={readingOptions}
+                    selectedLabels={filters.readingLabels}
+                    filterActive={filters.readingFilterActive}
+                    baseParams={tableFilterBaseParams}
+                  />
+                </th>
                 <th>Value</th>
               </tr>
             </thead>

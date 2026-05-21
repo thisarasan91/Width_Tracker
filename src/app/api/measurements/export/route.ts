@@ -43,13 +43,12 @@ export async function GET(request: Request) {
     query = query.lte("sent_at", localInputToTimestamptz(filters.to, true));
   }
 
-  const selectedValueNumbers = filters.values.map(Number).filter(Number.isFinite);
-  const valueFilterHasNoSelection = filters.valueFilterActive && selectedValueNumbers.length === 0;
-  if (filters.valueFilterActive && selectedValueNumbers.length > 0) {
-    query = query.in("reading_value", selectedValueNumbers);
+  const readingFilterHasNoSelection = filters.readingFilterActive && filters.readingLabels.length === 0;
+  if (filters.readingFilterActive && filters.readingLabels.length > 0) {
+    query = query.in("reading_label", filters.readingLabels);
   }
 
-  const { data, error } = valueFilterHasNoSelection
+  const { data, error } = readingFilterHasNoSelection
     ? { data: [], error: null }
     : await query.limit(10000);
 
