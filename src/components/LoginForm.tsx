@@ -7,6 +7,34 @@ import { createClient } from "@/lib/supabase/browser";
 
 type Mode = "login" | "signup";
 
+function isLocalOrigin(origin: string) {
+  try {
+    const { hostname } = new URL(origin);
+    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+  } catch {
+    return false;
+  }
+}
+
+function emailRedirectTo() {
+  const currentOrigin = window.location.origin;
+  const configuredSiteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+
+  if (!configuredSiteUrl) {
+    return `${currentOrigin}/auth/callback`;
+  }
+
+  try {
+    const configuredOrigin = new URL(configuredSiteUrl).origin;
+    if (isLocalOrigin(configuredOrigin) && !isLocalOrigin(currentOrigin)) {
+      return `${currentOrigin}/auth/callback`;
+    }
+    return `${configuredOrigin}/auth/callback`;
+  } catch {
+    return `${currentOrigin}/auth/callback`;
+  }
+}
+
 export function LoginForm() {
   const [mode, setMode] = useState<Mode>("login");
   const [message, setMessage] = useState("");
@@ -30,7 +58,7 @@ export function LoginForm() {
             email,
             password,
             options: {
-              emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin}/auth/callback`
+              emailRedirectTo: emailRedirectTo()
             }
           });
 

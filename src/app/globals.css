@@ -60,6 +60,11 @@ button:disabled {
   grid-template-columns: 260px minmax(0, 1fr);
 }
 
+.public-live-page {
+  min-height: 100vh;
+  padding: 30px;
+}
+
 .sidebar {
   position: sticky;
   top: 0;

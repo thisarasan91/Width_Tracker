@@ -44,30 +44,10 @@ export function MeasurementReadingFilter({
   const selectedSet = useMemo(() => new Set(isCustom ? selected : options), [isCustom, options, selected]);
   const summary = isCustom ? `${selected.length}/${options.length}` : "All";
 
-  function toggleLabel(label: string) {
-    setIsCustom(true);
-    setSelected((current) => {
-      const currentSet = new Set(isCustom ? current : options);
-      if (currentSet.has(label)) {
-        currentSet.delete(label);
-      } else {
-        currentSet.add(label);
-      }
-      return options.filter((option) => currentSet.has(option));
-    });
-  }
+  function applySelection(nextIsCustom: boolean, nextSelected: string[]) {
+    setIsCustom(nextIsCustom);
+    setSelected(nextSelected);
 
-  function selectAll() {
-    setIsCustom(false);
-    setSelected(options);
-  }
-
-  function clearAll() {
-    setIsCustom(true);
-    setSelected([]);
-  }
-
-  function applyFilter() {
     const params = new URLSearchParams();
     for (const [key, value] of Object.entries(baseParams)) {
       if (value) {
@@ -75,15 +55,35 @@ export function MeasurementReadingFilter({
       }
     }
 
-    if (isCustom) {
+    if (nextIsCustom) {
       params.set("reading_filter", "custom");
-      for (const label of selected) {
+      for (const label of nextSelected) {
         params.append("reading_label", label);
       }
     }
 
     const query = params.toString();
     window.location.href = query ? `/measurements?${query}` : "/measurements";
+  }
+
+  function toggleLabel(label: string) {
+    const currentSet = new Set(isCustom ? selected : options);
+    if (currentSet.has(label)) {
+      currentSet.delete(label);
+    } else {
+      currentSet.add(label);
+    }
+
+    const nextSelected = options.filter((option) => currentSet.has(option));
+    applySelection(nextSelected.length !== options.length, nextSelected);
+  }
+
+  function selectAll() {
+    applySelection(false, options);
+  }
+
+  function clearAll() {
+    applySelection(true, []);
   }
 
   return (
@@ -120,14 +120,6 @@ export function MeasurementReadingFilter({
                 <span>{label}</span>
               </label>
             ))}
-          </div>
-          <div className="table-filter-footer">
-            <button className="button secondary" type="button" onClick={() => setIsOpen(false)}>
-              Cancel
-            </button>
-            <button className="button primary" type="button" onClick={applyFilter}>
-              Apply
-            </button>
           </div>
         </div>
       ) : null}

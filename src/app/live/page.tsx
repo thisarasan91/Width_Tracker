@@ -1,5 +1,5 @@
 import { LiveClient } from "@/components/LiveClient";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type { Program } from "@/lib/types";
 
 type LivePageProps = {
@@ -10,7 +10,7 @@ export default async function LivePage({ searchParams }: LivePageProps) {
   const params = await searchParams;
   const requestedProgramId = typeof params.programId === "string" ? params.programId : "";
   const requestedReadingLabel = typeof params.readingLabel === "string" ? params.readingLabel : "";
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { data } = await supabase.from("programs").select("*").eq("is_active", true).order("program_name");
   const programs = (data ?? []) as Program[];
   const initialProgramId = programs.some((program) => program.id === requestedProgramId)
@@ -22,15 +22,17 @@ export default async function LivePage({ searchParams }: LivePageProps) {
     : "";
 
   return (
-    <div className="page-stack">
-      <header className="page-header">
-        <div>
-          <p className="eyebrow">Live</p>
-          <h1>Program Readings</h1>
-        </div>
-      </header>
+    <main className="public-live-page">
+      <div className="page-stack">
+        <header className="page-header">
+          <div>
+            <p className="eyebrow">Live</p>
+            <h1>Program Readings</h1>
+          </div>
+        </header>
 
-      <LiveClient programs={programs} initialProgramId={initialProgramId} initialReadingLabel={initialReadingLabel} />
-    </div>
+        <LiveClient programs={programs} initialProgramId={initialProgramId} initialReadingLabel={initialReadingLabel} />
+      </div>
+    </main>
   );
 }
