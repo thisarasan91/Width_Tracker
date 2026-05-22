@@ -1,5 +1,9 @@
 import { Download } from "lucide-react";
-import { DateRangePicker } from "@/components/DateRangePicker";
+import {
+  MeasurementsFilterForm,
+  type MeasurementDeviceOption,
+  type MeasurementProgramOption
+} from "@/components/MeasurementsFilterForm";
 import { MeasurementsTableClient } from "@/components/MeasurementsTableClient";
 import { MeasurementsAutoRefresh } from "@/components/MeasurementsAutoRefresh";
 import { createClient } from "@/lib/supabase/server";
@@ -41,10 +45,11 @@ export default async function MeasurementsPage({ searchParams }: MeasurementsPag
     measurementsQuery = measurementsQuery.lte("sent_at", localInputToTimestamptz(filters.to, true));
   }
 
-  const [measurementsResult, devicesResult, programsResult] = await Promise.all([
+  const [measurementsResult, devicesResult, programsResult, assignmentsResult] = await Promise.all([
     measurementsQuery.limit(1000),
     supabase.from("devices").select("*").order("device_name"),
-    supabase.from("programs").select("*").order("program_name")
+    supabase.from("programs").select("*").order("program_name"),
+    supabase.from("device_program_assignments").select("device_id, program_id")
   ]);
 
   const measurements = (measurementsResult.data ?? []) as Array<
@@ -62,6 +67,21 @@ export default async function MeasurementsPage({ searchParams }: MeasurementsPag
   >;
   const devices = (devicesResult.data ?? []) as Device[];
   const programs = (programsResult.data ?? []) as Program[];
+  const deviceOptions: MeasurementDeviceOption[] = devices.map((device) => ({
+    id: device.id,
+    label: `${device.device_name}${device.loom_name ? ` (${device.loom_name})` : ""}`
+  }));
+  const deviceIdsByProgram = new Map<string, Set<string>>();
+  for (const assignment of (assignmentsResult.data ?? []) as Array<{ device_id: string; program_id: string }>) {
+    const deviceIds = deviceIdsByProgram.get(assignment.program_id) ?? new Set<string>();
+    deviceIds.add(assignment.device_id);
+    deviceIdsByProgram.set(assignment.program_id, deviceIds);
+  }
+  const programOptions: MeasurementProgramOption[] = programs.map((program) => ({
+    id: program.id,
+    name: program.program_name,
+    deviceIds: Array.from(deviceIdsByProgram.get(program.id) ?? [])
+  }));
   const measurementRows = measurements.map((measurement) => ({
     id: measurement.id,
     sent_at: measurement.sent_at,
@@ -93,39 +113,16 @@ export default async function MeasurementsPage({ searchParams }: MeasurementsPag
             <h2>Machine, program, and period</h2>
           </div>
         </div>
-        <form className="form-grid two-column" method="get" action="/measurements">
-          <label>
-            Machine / Device
-            <select name="device_id" defaultValue={filters.deviceId}>
-              <option value="">All machines</option>
-              {devices.map((device) => (
-                <option key={device.id} value={device.id}>
-                  {device.device_name} {device.loom_name ? `(${device.loom_name})` : ""}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Program
-            <select name="program_id" defaultValue={filters.programId}>
-              <option value="">All programs</option>
-              {programs.map((program) => (
-                <option key={program.id} value={program.id}>
-                  {program.program_name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <DateRangePicker from={filters.from} to={filters.to} idPrefix="measurements-date-range" />
-          <div className="form-actions">
-            <button className="button primary" type="submit">
-              Apply filters
-            </button>
-            <a className="button secondary" href="/measurements">
-              Clear
-            </a>
-          </div>
-        </form>
+        <MeasurementsFilterForm
+          devices={deviceOptions}
+          programs={programOptions}
+          filters={{
+            deviceId: filters.deviceId,
+            programId: filters.programId,
+            from: filters.from,
+            to: filters.to
+          }}
+        />
       </section>
 
       <section className="panel">
