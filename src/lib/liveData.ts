@@ -5,6 +5,8 @@ type SupabaseClientLike = {
 };
 
 export type LiveReadingRow = {
+  device_id: string;
+  program_id: string;
   timestamp: string;
   reading_label: string;
   width: number;
@@ -66,7 +68,7 @@ export async function getLivePayload(
   const targetLabels = new Set(labels);
   let query = supabase
     .from("measurements")
-    .select("sent_at, reading_label, reading_value, unit")
+    .select("device_id, program_id, sent_at, reading_label, reading_value, unit")
     .eq("program_id", programId)
     .order("sent_at", { ascending: false });
 
@@ -101,6 +103,8 @@ export async function getLivePayload(
 
     countByLabel.set(label, currentCount + 1);
     rows.push({
+      device_id: row.device_id ?? "",
+      program_id: row.program_id ?? programId,
       timestamp: row.sent_at,
       reading_label: label,
       width,

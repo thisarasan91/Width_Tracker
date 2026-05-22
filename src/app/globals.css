@@ -291,7 +291,7 @@ table {
 }
 
 .live-chart-line {
-  stroke-width: 3;
+  stroke-width: 1.5;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -450,6 +450,66 @@ table {
   justify-content: flex-end;
   gap: 8px;
   padding-top: 10px;
+}
+
+.table-inline-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.reading-filter-cell {
+  min-width: 300px;
+  white-space: normal;
+}
+
+.reading-filter-title {
+  display: block;
+  margin-bottom: 7px;
+}
+
+.reading-filter-cell .table-inline-filter {
+  gap: 6px;
+  margin-bottom: 0;
+  text-transform: none;
+}
+
+.table-inline-filter-button {
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: #ffffff;
+  color: var(--primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.72rem;
+  letter-spacing: 0;
+  padding: 4px 7px;
+  text-transform: none;
+}
+
+.table-inline-filter-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 7px 10px;
+  font-size: 0.86rem;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.reading-filter-cell .table-inline-filter-option {
+  padding: 4px 7px;
+  font-size: 0.74rem;
+}
+
+.table-inline-filter-option input {
+  width: 15px;
+  height: 15px;
 }
 
 .chart-label {
