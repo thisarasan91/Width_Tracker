@@ -52,6 +52,7 @@ AVERAGE_SAMPLE_COUNT = 3
 CENTER_ALIGNMENT_TOLERANCE_RATIO = float(os.getenv("WIDTH_CENTER_ALIGNMENT_TOLERANCE_RATIO", "0.03"))
 CENTER_ALIGNMENT_TOLERANCE_PX: float | None = None
 ANGLE_ALIGNMENT_TOLERANCE_DEG = float(os.getenv("WIDTH_ANGLE_ALIGNMENT_TOLERANCE_DEG", "2.0"))
+CALIBRATION_WIDTH_MM = float(os.getenv("WIDTH_CALIBRATION_WIDTH_MM", "100.0"))
 
 COLOR_BG = (30, 36, 43)
 COLOR_PANEL = (245, 248, 250)
@@ -415,8 +416,18 @@ def load_alignment_settings() -> None:
     global CENTER_ALIGNMENT_TOLERANCE_RATIO
     global CENTER_ALIGNMENT_TOLERANCE_PX
     global ANGLE_ALIGNMENT_TOLERANCE_DEG
+    global CALIBRATION_WIDTH_MM
 
     data = read_settings_json()
+
+    CALIBRATION_WIDTH_MM = env_or_json_float(
+        "WIDTH_CALIBRATION_WIDTH_MM",
+        data,
+        ("calibration_width_mm",),
+        CALIBRATION_WIDTH_MM,
+        0.01,
+        10000.0,
+    )
 
     SPLASH_IMAGE_SCALE = env_or_json_float(
         "WIDTH_SPLASH_IMAGE_SCALE",
@@ -681,6 +692,7 @@ class WidthCloudApp:
         self.tape_present = False
         self.idle_started_at: float | None = time.time()
         self.shutdown_started = False
+        self.calibration_completed_at: float | None = None
 
     def build_manual_program(self) -> dict[str, Any]:
         return {
@@ -823,6 +835,12 @@ class WidthCloudApp:
             self.reset_program_state()
             self.message = "Manual live width"
             self.state = "manual_live"
+        elif action == "calibrate":
+            self.selected_program = None
+            self.reset_program_state()
+            self.calibration_completed_at = None
+            self.message = f"Align the {CALIBRATION_WIDTH_MM:.2f} mm calibration object"
+            self.state = "calibrating"
         elif action == "program":
             self.selected_program = value
             self.reset_program_state()
@@ -860,6 +878,56 @@ class WidthCloudApp:
             self.selected_program = None
             self.reset_program_state()
             self.state = "programs"
+
+    def update_calibration_capture(self, result: dict[str, Any], alignment_status: dict[str, Any]) -> str:
+        """Stabilize a raw pixel reading, then save its known millimetre scale."""
+        now = time.time()
+        width_px = parse_float(result.get("width_px"))
+        self.latest_result = result
+        self.latest_width = width_px
+        self.latest_unit = "px"
+        self.update_tape_activity(bool(result.get("ok")) and width_px is not None)
+
+        if not result.get("ok") or width_px is None or width_px <= 0:
+            self.reset_capture_state()
+            return f"Keep ruler in place: {result.get('msg', 'detecting edges')}"
+        if REQUIRE_CENTER_ALIGNMENT and not alignment_status.get("aligned"):
+            self.reset_capture_state()
+            return "Align ruler to the center guide"
+
+        if not self.stability.update(width_px, STABLE_TOLERANCE_PX, now):
+            self.countdown_started_at = None
+            self.capture_samples = []
+            return f"Hold ruler still: {width_px:.2f} px"
+
+        if self.countdown_started_at is None:
+            self.countdown_started_at = now
+            self.capture_samples = []
+        self.capture_samples.append(width_px)
+        self.capture_samples = self.capture_samples[-10:]
+        elapsed = now - self.countdown_started_at
+
+        if elapsed < COUNTDOWN_SECONDS:
+            return f"Alignment OK - stabilizing, {max(1, math.ceil(COUNTDOWN_SECONDS - elapsed))}"
+        if len(self.capture_samples) < AVERAGE_SAMPLE_COUNT:
+            return f"Averaging {len(self.capture_samples)}/{AVERAGE_SAMPLE_COUNT}"
+
+        averaged_px = sum(self.capture_samples[-AVERAGE_SAMPLE_COUNT:]) / AVERAGE_SAMPLE_COUNT
+        edge_detect.MM_PER_PIXEL = CALIBRATION_WIDTH_MM / averaged_px
+        edge_detect.USE_MM = True
+        edge_detect.calibration_status = (
+            f"Calibration saved: {CALIBRATION_WIDTH_MM:.3f} mm / {averaged_px:.2f} px"
+        )
+        payload = read_settings_json()
+        payload["calibration_width_mm"] = CALIBRATION_WIDTH_MM
+        payload["use_mm"] = True
+        payload["mm_per_pixel"] = edge_detect.MM_PER_PIXEL
+        write_settings_json(payload)
+        edge_detect.save_params_to_file()
+        self.calibration_completed_at = now
+        self.state = "calibration_complete"
+        self.reset_capture_state()
+        return "Calibration done"
 
     def current_label(self) -> str:
         if not self.selected_program:
@@ -1296,9 +1364,21 @@ def render_program_screen(width: int, height: int) -> np.ndarray:
     draw_button(img, refresh_rect, "Refresh", "", COLOR_BUTTON_ALT)
     app.click_targets.append(ClickTarget("refresh", refresh_rect))
 
-    manual_rect = (30, 112, width - 30, 184)
+    button_gap = 12
+    button_width = (width - 60 - button_gap) // 2
+    manual_rect = (30, 112, 30 + button_width, 184)
     draw_button(img, manual_rect, "Manual", "Live width display. No cloud upload.", COLOR_SUCCESS)
     app.click_targets.append(ClickTarget("manual", manual_rect))
+
+    calibration_rect = (manual_rect[2] + button_gap, 112, width - 30, 184)
+    draw_button(
+        img,
+        calibration_rect,
+        "Calibration",
+        f"Known object: {CALIBRATION_WIDTH_MM:.2f} mm",
+        COLOR_DANGER,
+    )
+    app.click_targets.append(ClickTarget("calibrate", calibration_rect))
 
     top = 206
     margin = 30
@@ -1530,6 +1610,29 @@ def draw_manual_hud(display: np.ndarray, status_text: str) -> np.ndarray:
     return display
 
 
+def draw_calibration_hud(display: np.ndarray, status_text: str) -> np.ndarray:
+    width = display.shape[1]
+    height = display.shape[0]
+    app.click_targets = []
+    cv2.rectangle(display, (0, 0), (width, 126), (20, 26, 32), -1)
+    cv2.rectangle(display, (0, height - 82), (width, height), (20, 26, 32), -1)
+    draw_text(display, "TB Meter | Calibration", (18, 34), 0.72, COLOR_TEXT, 2)
+    draw_text(
+        display,
+        f"Keep the {CALIBRATION_WIDTH_MM:.2f} mm ruler in place and align it with the center guide.",
+        (18, 74),
+        0.52,
+        COLOR_WARNING,
+        2,
+    )
+    draw_text(display, status_text[:64], (18, 112), 0.58, COLOR_SUCCESS if "OK" in status_text else COLOR_TEXT, 2)
+    draw_text(display, "Do not move the ruler while the reading stabilizes.", (18, height - 30), 0.52, COLOR_TEXT, 2)
+    exit_rect = (width - 128, 18, width - 14, 66)
+    draw_button(display, exit_rect, "Exit", "", COLOR_DANGER)
+    app.click_targets.append(ClickTarget("abort", exit_rect))
+    return display
+
+
 def fit_cover_to_canvas(display: np.ndarray, width: int, height: int) -> np.ndarray:
     src_h, src_w = display.shape[:2]
     scale = max(width / src_w, height / src_h)
@@ -1651,6 +1754,13 @@ def main() -> int:
                 apply_cloud_window_layout(screen_w, screen_h)
                 params_window_was_open = edge_detect.params_window_open
             app.update_upload_state()
+            if (
+                app.state == "calibration_complete"
+                and app.calibration_completed_at is not None
+                and time.time() - app.calibration_completed_at >= 3.0
+            ):
+                app.state = "programs"
+                app.message = "Calibration saved. Select assigned program"
 
             if app.state == "programs":
                 view = render_program_screen(screen_w, screen_h)
@@ -1680,6 +1790,22 @@ def main() -> int:
                 view = render_status_screen(screen_w, screen_h, "Measurement complete", detail)
             elif app.state == "upload_failed":
                 view = render_status_screen(screen_w, screen_h, "Upload failed, retry required", app.upload_error, failed=True)
+            elif app.state == "calibration_complete":
+                view = render_status_screen(
+                    screen_w,
+                    screen_h,
+                    "Calibration done! Settings saved",
+                    f"Scale: {edge_detect.MM_PER_PIXEL:.6f} mm/px | Returning home...",
+                )
+            elif app.state == "calibrating":
+                frame = picam2.capture_array()
+                params = edge_detect.get_params()
+                result = edge_detect.detect_parallel_edges_and_width(frame, params)
+                display = draw_detection_overlay(frame.copy(), result, params)
+                alignment_status = get_configured_alignment_status(display, result)
+                status_text = app.update_calibration_capture(result, alignment_status)
+                view = fit_cover_to_canvas(display, screen_w, screen_h)
+                view = draw_calibration_hud(view, status_text)
             elif app.state == "manual_live":
                 frame = picam2.capture_array()
                 params = edge_detect.get_params()
