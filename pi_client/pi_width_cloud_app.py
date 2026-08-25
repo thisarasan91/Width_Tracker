@@ -26,7 +26,14 @@ import numpy as np
 import requests
 
 import edge_detect
-from width_device_client import DeviceClientError, fetch_device_settings, fetch_programs, local_timestamp_iso, upload_measurement
+from width_device_client import (
+    DeviceClientError,
+    fetch_device_settings,
+    fetch_programs,
+    local_timestamp_iso,
+    update_device_settings,
+    upload_measurement,
+)
 
 
 WINDOW_CLOUD = "TB Meter"
@@ -110,6 +117,16 @@ def format_measurement_value(value: Any) -> str:
         return f"{float(value):.2f}"
     except (TypeError, ValueError):
         return str(value)
+
+
+def format_calibration_result_detail(previous_mmpx: float | None, current_mmpx: float, cloud_synced: bool) -> str:
+    sync_text = "Cloud synced" if cloud_synced else "Cloud sync pending"
+    if previous_mmpx is None or previous_mmpx <= 0:
+        return f"New {current_mmpx:.6f} mm/px | Previous unavailable | {sync_text}"
+
+    delta = current_mmpx - previous_mmpx
+    percent = (delta / previous_mmpx) * 100.0
+    return f"New {current_mmpx:.6f} mm/px | Change {delta:+.6f} ({percent:+.2f}%) | {sync_text}"
 
 
 def read_settings_json() -> dict[str, Any]:
@@ -693,6 +710,7 @@ class WidthCloudApp:
         self.idle_started_at: float | None = time.time()
         self.shutdown_started = False
         self.calibration_completed_at: float | None = None
+        self.calibration_result_detail = ""
 
     def build_manual_program(self) -> dict[str, Any]:
         return {
@@ -839,7 +857,8 @@ class WidthCloudApp:
             self.selected_program = None
             self.reset_program_state()
             self.calibration_completed_at = None
-            self.message = f"Align the {CALIBRATION_WIDTH_MM:.2f} mm calibration object"
+            self.calibration_result_detail = ""
+            self.message = "Align the calibration object"
             self.state = "calibrating"
         elif action == "program":
             self.selected_program = value
@@ -913,10 +932,11 @@ class WidthCloudApp:
             return f"Averaging {len(self.capture_samples)}/{AVERAGE_SAMPLE_COUNT}"
 
         averaged_px = sum(self.capture_samples[-AVERAGE_SAMPLE_COUNT:]) / AVERAGE_SAMPLE_COUNT
+        previous_mmpx = edge_detect.MM_PER_PIXEL if edge_detect.USE_MM and edge_detect.MM_PER_PIXEL > 0 else None
         edge_detect.MM_PER_PIXEL = CALIBRATION_WIDTH_MM / averaged_px
         edge_detect.USE_MM = True
         edge_detect.calibration_status = (
-            f"Calibration saved: {CALIBRATION_WIDTH_MM:.3f} mm / {averaged_px:.2f} px"
+            f"Calibration saved: {edge_detect.MM_PER_PIXEL:.6f} mm/px"
         )
         payload = read_settings_json()
         payload["calibration_width_mm"] = CALIBRATION_WIDTH_MM
@@ -924,6 +944,22 @@ class WidthCloudApp:
         payload["mm_per_pixel"] = edge_detect.MM_PER_PIXEL
         write_settings_json(payload)
         edge_detect.save_params_to_file()
+        cloud_synced = False
+        try:
+            update_device_settings(
+                edge_settings={
+                    "use_mm": True,
+                    "mm_per_pixel": edge_detect.MM_PER_PIXEL,
+                }
+            )
+            cloud_synced = True
+        except (DeviceClientError, requests.RequestException):
+            cloud_synced = False
+        self.calibration_result_detail = format_calibration_result_detail(
+            previous_mmpx,
+            edge_detect.MM_PER_PIXEL,
+            cloud_synced,
+        )
         self.calibration_completed_at = now
         self.state = "calibration_complete"
         self.reset_capture_state()
@@ -1375,7 +1411,7 @@ def render_program_screen(width: int, height: int) -> np.ndarray:
         img,
         calibration_rect,
         "Calibration",
-        f"Known object: {CALIBRATION_WIDTH_MM:.2f} mm",
+        "Guided reference setup",
         COLOR_DANGER,
     )
     app.click_targets.append(ClickTarget("calibrate", calibration_rect))
@@ -1619,7 +1655,7 @@ def draw_calibration_hud(display: np.ndarray, status_text: str) -> np.ndarray:
     draw_text(display, "TB Meter | Calibration", (18, 34), 0.72, COLOR_TEXT, 2)
     draw_text(
         display,
-        f"Keep the {CALIBRATION_WIDTH_MM:.2f} mm ruler in place and align it with the center guide.",
+        "Keep the reference object in place and align it with the center guide.",
         (18, 74),
         0.52,
         COLOR_WARNING,
@@ -1795,7 +1831,7 @@ def main() -> int:
                     screen_w,
                     screen_h,
                     "Calibration done! Settings saved",
-                    f"Scale: {edge_detect.MM_PER_PIXEL:.6f} mm/px | Returning home...",
+                    app.calibration_result_detail or f"New {edge_detect.MM_PER_PIXEL:.6f} mm/px",
                 )
             elif app.state == "calibrating":
                 frame = picam2.capture_array()

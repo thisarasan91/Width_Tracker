@@ -109,6 +109,39 @@ def fetch_device_settings() -> dict[str, Any]:
     return payload
 
 
+def update_device_settings(
+    edge_settings: dict[str, Any] | None = None,
+    app_settings: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    if edge_settings:
+        payload["edge_settings"] = edge_settings
+    if app_settings:
+        payload["app_settings"] = app_settings
+
+    if not payload:
+        raise DeviceClientError("No device settings were provided.")
+
+    response = requests.patch(
+        f"{API_BASE}/api/device/settings",
+        headers=headers(),
+        json=payload,
+        timeout=20,
+    )
+    if response.status_code != 200:
+        raise DeviceClientError(f"Could not update device settings: {response.text}")
+
+    try:
+        body = response.json()
+    except ValueError as exc:
+        raise DeviceClientError(f"Settings update returned invalid JSON: {response.text}") from exc
+
+    if not body.get("success"):
+        raise DeviceClientError(body.get("message", "Device settings update failed."))
+
+    return body
+
+
 def local_timestamp_iso() -> str:
     if ZoneInfo is not None:
         try:
