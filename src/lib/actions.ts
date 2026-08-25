@@ -258,6 +258,15 @@ export async function updateDeviceSettingsAction(
 
     const edgeSettings = parseJsonObject(formData, "edge_settings", "Edge settings");
     const appSettings = parseJsonObject(formData, "app_settings", "App settings");
+    const calibrationWidth = Number(asText(formData, "calibration_width_mm"));
+
+    if (!Number.isFinite(calibrationWidth) || calibrationWidth <= 0) {
+      return {
+        ok: false,
+        message: "Calibration object width must be greater than zero."
+      };
+    }
+    appSettings.calibration_width_mm = calibrationWidth;
 
     const supabase = await createClient();
     const { error } = await supabase.from("device_settings").upsert(

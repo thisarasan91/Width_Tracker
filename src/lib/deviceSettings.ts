@@ -22,6 +22,7 @@ export const defaultEdgeSettings: Record<string, number> = {
 };
 
 export const defaultAppSettings: Record<string, number | boolean> = {
+  calibration_width_mm: 100,
   stable_seconds: 1.0,
   countdown_seconds: 3,
   stable_tolerance_mm: 0.15,
