@@ -20,6 +20,7 @@ type DeviceSettingsFormProps = {
 export function DeviceSettingsForm({ deviceId, settings }: DeviceSettingsFormProps) {
   const [state, formAction] = useActionState(updateDeviceSettingsAction, initialState);
   const mergedSettings = mergeDeviceSettings(settings);
+  const calibrationWidth = Number(mergedSettings.app_settings.calibration_width_mm) || 100;
 
   return (
     <section className="panel">
@@ -31,6 +32,19 @@ export function DeviceSettingsForm({ deviceId, settings }: DeviceSettingsFormPro
       </div>
       <form className="form-grid two-column" action={formAction}>
         <input type="hidden" name="device_id" value={deviceId} />
+        <label>
+          Calibration object width (mm)
+          <input
+            name="calibration_width_mm"
+            type="number"
+            min="0.01"
+            step="0.01"
+            required
+            defaultValue={calibrationWidth}
+          />
+          <span className="field-hint">Enter the exact known width of the ruler or reference object used at the Pi.</span>
+        </label>
+        <div />
         <label>
           Edge settings JSON
           <textarea
